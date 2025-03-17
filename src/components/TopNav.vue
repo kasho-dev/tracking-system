@@ -8,12 +8,12 @@ import Vue from "../assets/vue.svg";
 const isDark = useDark({
     valueDark: "app-dark"
 });
-
 const toggle = () => isDark.value = !isDark.value;
 </script>
 
 <template>
-  
+  <!--test-->
+
   <Toolbar class="rounded-none border-x-0 border-t-0">
     <template #start>
 
