@@ -15,6 +15,7 @@ import {
   Icon,
   X
 } from "lucide-vue-next";
+import * as XLSX from "xlsx";
 
 // Define the type for documents
 interface Document {
@@ -149,11 +150,130 @@ const documents = ref<Document[]>([
     createdBy: "Lucas Hall",
     dateCreated: "March 19, 2025, 10:10:45 AM",
   },
+
+  
 ]);
+
+
+//Checkbox Function
+const selectedDocuments = ref<number[]>([]);
+
+const toggleSelection = (id: number) => {
+  const index = selectedDocuments.value.indexOf(id);
+  if (index > -1) {
+    selectedDocuments.value.splice(index, 1); // Uncheck if already selected
+  } else {
+    selectedDocuments.value.push(id); // Add to selected if not already checked
+  }
+};
+//Delete Selected Checkbox Function
+const deleteSelected = () => {
+  documents.value = documents.value.filter(
+    (doc) => !selectedDocuments.value.includes(doc.id)
+  );
+  selectedDocuments.value = []; // Clear selection after deletion
+};
+
+
+//Download Function
+const selectedOverlayDocuments = ref<number[]>([]);
+
+const toggleOverlaySelection = (id: number) => {
+  const index = selectedOverlayDocuments.value.indexOf(id);
+  if (index > -1) {
+    selectedOverlayDocuments.value.splice(index, 1); // Uncheck if already selected
+  } else {
+    selectedOverlayDocuments.value.push(id); // Add to selected if not already checked
+  }
+};
+
+const downloadSelectedDocuments = () => {
+  if (selectedDocuments.value.length === 0) return; // No selection, do nothing
+
+  const selectedDocs = selectedDocuments.value
+    .map(id => documents.value.find(d => d.id === id))
+    .filter((doc): doc is Document => !!doc); // Ensures only valid documents are included
+
+  if (selectedDocs.length === 0) return; // Prevent errors if no valid documents are found
+
+  if (selectedDocs.length === 1) {
+    // Single order selected - Name file based on Processing Order #
+    const doc = selectedDocs[0];
+    const fileName = `${doc.orderNumber}.xlsx`;
+
+    const data = [{
+      "Order Number": doc.orderNumber,
+      "Tracking ID": doc.trackingId,
+      "Handled By": doc.handledBy,
+      "Created By": doc.createdBy,
+      "Date Created": doc.dateCreated
+    }];
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Order Details");
+    XLSX.writeFile(workbook, fileName);
+
+  } else {
+    // Multiple orders selected - Name file as "Multiple Orders.xlsx"
+    const data = selectedDocs.map(doc => ({
+      "Order Number": doc.orderNumber,
+      "Tracking ID": doc.trackingId,
+      "Handled By": doc.handledBy,
+      "Created By": doc.createdBy,
+      "Date Created": doc.dateCreated
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Selected Orders");
+    XLSX.writeFile(workbook, "Multiple Orders.xlsx");
+  }
+};
+
+
+//Confirm Delete Function
+const showDeleteConfirmation = ref(false); // Controls popup visibility
+const documentsToDelete = ref<number[]>([]); // Stores selected document IDs
+
+// Open confirmation overlay
+const confirmDelete = () => {
+  if (selectedDocuments.value.length > 0) {
+    documentsToDelete.value = [...selectedDocuments.value]; // Store selected IDs
+    showDeleteConfirmation.value = true;
+  }
+};
+
+// Close the confirmation popup
+const closeDeletePopup = () => {
+  showDeleteConfirmation.value = false;
+};
+
+// Perform deletion and close popup
+const deleteSelectedDocuments = () => {
+  documents.value = documents.value.filter(doc => !documentsToDelete.value.includes(doc.id));
+  selectedDocuments.value = []; // Clear selection after deleting
+  showDeleteConfirmation.value = false;
+};
+
+//Checkbox Change Icon Function
+const handleCheckboxChange = (id: number) => {
+  toggleSelection(id); // Handles selection for delete function
+  toggleOverlaySelection(id); // Handles selection for download function
+};
+
+
+
+
 </script>
+
+
+
 
 <template>
   <body class="bg-[#0A0E1A] flex h-screen p-4">
+
+    
     <!-- Add PO Document Button -->
     <div class="w-64 bg-[#0A0E1A] text-white mr-4 rounded-lg">
       <button
@@ -176,9 +296,46 @@ const documents = ref<Document[]>([
             d="m16 6-8.414 8.586a2 2 0 0 0 0 2.828 2 2 0 0 0 2.828 0l8.414-8.586a4 4 0 0 0 0-5.656 4 4 0 0 0-5.656 0l-8.415 8.585a6 6 0 1 0 8.486 8.486"
           />
         </svg>
-        Add PO Number
+        Add Processing Order
       </button>
-      <!--test-->
+
+
+      <!-- PO Document Creation Modal -->
+    <div
+      v-if="showModal"
+      class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center"
+    >
+      <div class="bg-[#0B132B] p-6 rounded-lg shadow-md w-96">
+        <h2 class="text-lg font-semibold mb-4 text-white text-center">
+          Enter PO File Name
+        </h2>
+
+        <input
+          v-model="poNumber"
+          type="text"
+          placeholder="eg. Processing Order #"
+          class="w-full p-2 border rounded-md mb-4"
+        />
+
+        <div class="flex justify-end gap-2">
+          <button
+            @click="closeModalAdd"
+            class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400 transition"
+          >
+            Cancel
+          </button>
+          <button
+            @click="submitPO"
+            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
+          >
+            Submit
+          </button>
+        </div>
+      </div>
+    </div>
+
+
+      <!--Sidebar Buttons-->
 
       <div class="mt-4 space-y-2">
         <!-- Completed -->
@@ -286,12 +443,13 @@ const documents = ref<Document[]>([
 
       <!-- Action Buttons with Lucide Icons -->
       <div class="flex space-x-4 mb-4">
-        <button class="p-2 bg-gray-100 rounded hover:bg-gray-300 transition">
+        <button class="p-2 bg-gray-100 rounded hover:bg-gray-300 transition" @click="downloadSelectedDocuments">
           <Download />
         </button>
-        <button class="p-2 bg-gray-100 rounded hover:bg-gray-300 transition">
-          <Trash />
-        </button>
+        <button class="p-2 bg-gray-100 rounded hover:bg-gray-300 transition" @click="confirmDelete">
+  <Trash />
+</button>
+
         <button class="p-2 bg-gray-100 rounded hover:bg-gray-300 transition">
           <Ellipsis />
         </button>
@@ -316,7 +474,8 @@ const documents = ref<Document[]>([
               class="border-b hover:bg-gray-50 text-sm transition"
             >
               <td class="p-3">
-                <input type="checkbox" class="w-4 h-4" />
+                <input type="checkbox" class="w-4 h-4" :checked="selectedDocuments.includes(doc.id)"
+                @change="handleCheckboxChange(doc.id)"/>
               </td>
               <td class="p-3">
                 <a
@@ -411,39 +570,21 @@ const documents = ref<Document[]>([
       </div>
     </div>
 
-    <!-- PO Number Modal -->
-    <div
-      v-if="showModal"
-      class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center"
-    >
-      <div class="bg-[#0B132B] p-6 rounded-lg shadow-md w-96">
-        <h2 class="text-lg font-semibold mb-4 text-white text-center">
-          Enter PO Number
-        </h2>
+    
 
-        <input
-          v-model="poNumber"
-          type="text"
-          placeholder="eg.2418203490"
-          class="w-full p-2 border rounded-md mb-4"
-        />
-
-        <div class="flex justify-end gap-2">
-          <button
-            @click="closeModalAdd"
-            class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400 transition"
-          >
-            Cancel
-          </button>
-          <button
-            @click="submitPO"
-            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
-          >
-            Submit
-          </button>
-        </div>
-      </div>
+    <!-- Delete Confirmation Popup -->
+<div v-if="showDeleteConfirmation" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+  <div class="bg-white p-6 rounded-lg shadow-lg w-96">
+    <h2 class="text-lg font-semibold mb-4">Confirm Deletion</h2>
+    <p class="text-gray-600">Are you sure you want to delete the selected documents? This action cannot be undone.</p>
+    
+    <div class="mt-6 flex justify-end space-x-4">
+      <button @click="closeDeletePopup" class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400 transition">Cancel</button>
+      <button @click="deleteSelectedDocuments" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition">Delete</button>
     </div>
+  </div>
+</div>
+
   </body>
 </template>
 
