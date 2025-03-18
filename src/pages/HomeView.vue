@@ -1,8 +1,12 @@
 <script setup lang="ts">
-import Vite from "../assets/vite.svg";
-import Vue from "../assets/vue.svg";
-import Button from "primevue/button";
-import { ref } from "vue";
+// import Vite from "../assets/vite.svg";
+// import Vue from "../assets/vue.svg";
+// import Button from "primevue/button";
+// import { defineStore } from "pinia";
+import { ref, computed } from "vue";
+import { useSearchStore } from "/workspaces/tracking-system/src/stores/searchStore.ts"; // Import the Pinia store
+const searchStore = useSearchStore(); // ✅ Initialize store
+
 import {
   Check,
   Clock,
@@ -13,7 +17,7 @@ import {
   Trash,
   Ellipsis,
   Icon,
-  X
+  X,
 } from "lucide-vue-next";
 import * as XLSX from "xlsx";
 
@@ -27,10 +31,14 @@ interface Document {
   dateCreated: string;
 }
 
+// Search Query
+const searchQuery = ref("");
+
 // Document data
 const showModal = ref(false);
 const poNumber = ref("");
 
+// Add PO Document Modal
 const openModalAdd = () => {
   showModal.value = true;
 };
@@ -263,8 +271,18 @@ const handleCheckboxChange = (id: number) => {
 };
 
 
+// Computed property to filter documents
+const filteredDocuments = computed(() => {
+  if (!searchStore.searchQuery) return documents.value;
 
-
+  return documents.value.filter((doc) =>
+    Object.values(doc).some((field) =>
+      String(field)
+        .toLowerCase()
+        .includes(searchStore.searchQuery.toLowerCase())
+    )
+  );
+});
 </script>
 
 
@@ -437,7 +455,7 @@ const handleCheckboxChange = (id: number) => {
       </div>
     </div>
 
-    <!-- Data Table-->
+    <!-- Data Table Background -->
     <div class="p-6 flex-grow bg-white rounded-lg shadow-md">
       <h1 class="text-2xl font-bold mb-4">ALL DOCUMENTS</h1>
 
@@ -455,27 +473,40 @@ const handleCheckboxChange = (id: number) => {
         </button>
       </div>
 
-      <!-- Data Table -->
-      <div class="border rounded-lg overflow-hidden w-full bg-white">
-        <table class="w-full border-collapse bg-white">
-          <thead class="bg-gray-100 text-left">
+      <!-- Table Header (Fixed) -->
+      <div class="border rounded-t-lg bg-gray-100">
+        <table class="w-full border-collapse">
+          <thead>
             <tr class="text-gray-600 text-sm">
-              <th class="p-3"><input type="checkbox" class="w-4 h-4" /></th>
-              <th class="p-3">Order #</th>
-              <th class="p-3">Handled by</th>
-              <th class="p-3">Created by</th>
-              <th class="p-3">Date Created</th>
+              <th class="p-3 pr-5">
+                <input type="checkbox" class="w-4 h-4" />
+              </th>
+              <th class="p-0">Order #</th>
+              <th class="p-0">Handled by</th>
+              <th class="p-0">Created by</th>
+              <th class="p-0">Date Created</th>
             </tr>
           </thead>
+        </table>
+      </div>
+
+      <!-- Scrollable Table Body -->
+      <div
+        class="border border-t-0 rounded-b-lg overflow-auto w-full max-h-[550px]"
+      >
+        <table class="w-full border-collapse bg-white">
           <tbody>
             <tr
-              v-for="doc in documents"
+              v-for="doc in filteredDocuments"
               :key="doc.id"
               class="border-b hover:bg-gray-50 text-sm transition"
             >
               <td class="p-3">
                 <input type="checkbox" class="w-4 h-4" :checked="selectedDocuments.includes(doc.id)"
                 @change="handleCheckboxChange(doc.id)"/>
+                </td>
+              <td class="p-3 pl-12">
+                <input type="checkbox" class="w-4 h-4" />
               </td>
               <td class="p-3">
                 <a
@@ -487,7 +518,6 @@ const handleCheckboxChange = (id: number) => {
                 </a>
                 <div class="text-xs text-gray-500">{{ doc.trackingId }}</div>
               </td>
-
               <td class="p-3 font-semibold">{{ doc.handledBy }}</td>
               <td class="p-3 font-semibold">{{ doc.createdBy }}</td>
               <td class="p-3">{{ doc.dateCreated }}</td>
@@ -495,77 +525,76 @@ const handleCheckboxChange = (id: number) => {
           </tbody>
         </table>
       </div>
-      <div
-        v-if="isModalOpen"
-        class="fixed inset-0 bg-black bg-opacity-50 flex justify-end"
-      >
-        <div class="w-96 bg-[#1A1F36] text-white p-6 shadow-lg relative">
-          <!-- Close Button -->
-          <button
-            class="absolute top-4 right-4 text-gray-400 hover:text-white"
-            @click="closeModal"
-          >
-            <X />
-          </button>
+    </div>
 
-          <h2 class="text-lg font-bold">{{ selectedOrder?.orderNumber }}</h2>
-          <p class="text-sm text-gray-400">Order Details</p>
+    <div
+      v-if="isModalOpen"
+      class="fixed inset-0 bg-black bg-opacity-50 flex justify-end"
+    >
+      <div class="w-96 bg-[#1A1F36] text-white p-6 shadow-lg relative">
+        <!-- Close Button -->
+        <button
+          class="absolute top-4 right-4 text-gray-400 hover:text-white"
+          @click="closeModal"
+        >
+          <X />
+        </button>
 
-          <!-- Order Details -->
-          <div class="mt-4 text-sm">
-            <div class="flex justify-between">
-              <span class="text-gray-400">Created at</span>
-              <span>{{ selectedOrder?.dateCreated }}</span>
-            </div>
-            <div class="flex justify-between mt-2">
-              <span class="text-gray-400">Status</span>
-              <span
-                class="px-2 py-1 bg-yellow-500 text-black text-xs font-semibold rounded"
-                >In progress</span
-              >
-            </div>
+        <h2 class="text-lg font-bold">{{ selectedOrder?.orderNumber }}</h2>
+        <p class="text-sm text-gray-400">Order Details</p>
+
+        <!-- Order Details -->
+        <div class="mt-4 text-sm">
+          <div class="flex justify-between">
+            <span class="text-gray-400">Created at</span>
+            <span>{{ selectedOrder?.dateCreated }}</span>
           </div>
-
-          <!-- Handler Info -->
-          <div class="mt-6">
-            <h3 class="font-semibold">Handled By:</h3>
-            <p class="text-sm">{{ selectedOrder?.handledBy }}</p>
-            <p class="text-sm text-blue-400 underline">
-              juandelacruz@gmail.com
-            </p>
-            <p class="text-sm">09384874855</p>
+          <div class="flex justify-between mt-2">
+            <span class="text-gray-400">Status</span>
+            <span
+              class="px-2 py-1 bg-yellow-500 text-black text-xs font-semibold rounded"
+              >In progress</span
+            >
           </div>
+        </div>
 
-          <!-- Timeline -->
-          <div class="mt-6">
-            <h3 class="font-semibold">Timeline</h3>
-            <ul class="mt-2 space-y-2 text-sm">
-              <li class="flex items-start gap-2">
-                <Check class="text-green-400" />
-                <span>
-                  <strong>The Document is being verified</strong>
-                  <p class="text-gray-400">Pending</p>
-                </span>
-              </li>
-              <li class="flex items-start gap-2">
-                <Clock class="text-yellow-400" />
-                <span>
-                  <strong>Document checked by supplier</strong>
-                  <p class="text-gray-400">In progress</p>
-                </span>
-              </li>
-              <li class="flex items-start gap-2">
-                <Check class="text-green-400" />
-                <span>
-                  <strong>Document was received</strong>
-                  <p class="text-gray-400">
-                    Document was received by supplier
-                    <span class="text-blue-400">John Doe</span>
-                  </p>
-                </span>
-              </li>
-            </ul>
-          </div>
+        <!-- Handler Info -->
+        <div class="mt-6">
+          <h3 class="font-semibold">Handled By:</h3>
+          <p class="text-sm">{{ selectedOrder?.handledBy }}</p>
+          <p class="text-sm text-blue-400 underline">juandelacruz@gmail.com</p>
+          <p class="text-sm">09384874855</p>
+        </div>
+
+        <!-- Timeline -->
+        <div class="mt-6">
+          <h3 class="font-semibold">Timeline</h3>
+          <ul class="mt-2 space-y-2 text-sm">
+            <li class="flex items-start gap-2">
+              <Check class="text-green-400" />
+              <span>
+                <strong>The Document is being verified</strong>
+                <p class="text-gray-400">Pending</p>
+              </span>
+            </li>
+            <li class="flex items-start gap-2">
+              <Clock class="text-yellow-400" />
+              <span>
+                <strong>Document checked by supplier</strong>
+                <p class="text-gray-400">In progress</p>
+              </span>
+            </li>
+            <li class="flex items-start gap-2">
+              <Check class="text-green-400" />
+              <span>
+                <strong>Document was received</strong>
+                <p class="text-gray-400">
+                  Document was received by supplier
+                  <span class="text-blue-400">John Doe</span>
+                </p>
+              </span>
+            </li>
+          </ul>
         </div>
       </div>
     </div>
