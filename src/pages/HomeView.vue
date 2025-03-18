@@ -13,6 +13,7 @@ import {
   Trash,
   Ellipsis,
   Icon,
+  X
 } from "lucide-vue-next";
 
 // Define the type for documents
@@ -29,24 +30,41 @@ interface Document {
 const showModal = ref(false);
 const poNumber = ref("");
 
-const openModal = () => {
+const openModalAdd = () => {
   showModal.value = true;
 };
 
-const closeModal = () => {
+const closeModalAdd = () => {
   showModal.value = false;
   poNumber.value = ""; // Reset input field when closed
 };
 
 const submitPO = () => {
   console.log("Submitted PO Number:", poNumber.value);
-  closeModal();
+  closeModalAdd();
 };
 
 const activeButton = ref("Completed"); // Default active button
 
 const setActive = (buttonName: string) => {
   activeButton.value = buttonName;
+};
+
+/// MODAL 2
+// Modal state
+const selectedOrder = ref<Document | null>(null);
+const isModalOpen = ref(false);
+
+// Open modal function
+const openModal = (order: Document) => {
+  selectedOrder.value = order;
+  isModalOpen.value = true;
+};
+
+// Close modal function
+const closeModal = () => {
+  isModalOpen.value = false;
+  selectedOrder.value = null;
 };
 
 //Documents Data
@@ -132,30 +150,14 @@ const documents = ref<Document[]>([
     dateCreated: "March 19, 2025, 10:10:45 AM",
   },
 ]);
-]);
-// Modal state
-const selectedOrder = ref<Document | null>(null);
-const isModalOpen = ref(false);
-
-// Open modal function
-const openModal = (order: Document) => {
-  selectedOrder.value = order;
-  isModalOpen.value = true;
-};
-
-// Close modal function
-const closeModal = () => {
-  isModalOpen.value = false;
-  selectedOrder.value = null;
-};
-
 </script>
 
 <template>
   <body class="bg-[#0A0E1A] flex h-screen p-4">
+    <!-- Add PO Document Button -->
     <div class="w-64 bg-[#0A0E1A] text-white mr-4 rounded-lg">
       <button
-        @click="openModal"
+        @click="openModalAdd"
         class="w-full flex items-center justify-center gap-2 bg-[#6A5CFE] text-white text-sm font-semibold py-3 rounded-xl hover:bg-[#7C6CFF] transition"
       >
         <svg
@@ -278,6 +280,7 @@ const closeModal = () => {
       </div>
     </div>
 
+    <!-- Data Table-->
     <div class="p-6 flex-grow bg-white rounded-lg shadow-md">
       <h1 class="text-2xl font-bold mb-4">ALL DOCUMENTS</h1>
 
@@ -312,17 +315,99 @@ const closeModal = () => {
               :key="doc.id"
               class="border-b hover:bg-gray-50 text-sm transition"
             >
-              <td class="p-3"><input type="checkbox" class="w-4 h-4" /></td>
               <td class="p-3">
-                <a href="#" class="text-blue-600">{{ doc.orderNumber }}</a>
+                <input type="checkbox" class="w-4 h-4" />
+              </td>
+              <td class="p-3">
+                <a
+                  href="#"
+                  class="text-blue-600 cursor-pointer"
+                  @click.prevent="openModal(doc)"
+                >
+                  {{ doc.orderNumber }}
+                </a>
                 <div class="text-xs text-gray-500">{{ doc.trackingId }}</div>
               </td>
+
               <td class="p-3 font-semibold">{{ doc.handledBy }}</td>
               <td class="p-3 font-semibold">{{ doc.createdBy }}</td>
               <td class="p-3">{{ doc.dateCreated }}</td>
             </tr>
           </tbody>
         </table>
+      </div>
+      <div
+        v-if="isModalOpen"
+        class="fixed inset-0 bg-black bg-opacity-50 flex justify-end"
+      >
+        <div class="w-96 bg-[#1A1F36] text-white p-6 shadow-lg relative">
+          <!-- Close Button -->
+          <button
+            class="absolute top-4 right-4 text-gray-400 hover:text-white"
+            @click="closeModal"
+          >
+            <X />
+          </button>
+
+          <h2 class="text-lg font-bold">{{ selectedOrder?.orderNumber }}</h2>
+          <p class="text-sm text-gray-400">Order Details</p>
+
+          <!-- Order Details -->
+          <div class="mt-4 text-sm">
+            <div class="flex justify-between">
+              <span class="text-gray-400">Created at</span>
+              <span>{{ selectedOrder?.dateCreated }}</span>
+            </div>
+            <div class="flex justify-between mt-2">
+              <span class="text-gray-400">Status</span>
+              <span
+                class="px-2 py-1 bg-yellow-500 text-black text-xs font-semibold rounded"
+                >In progress</span
+              >
+            </div>
+          </div>
+
+          <!-- Handler Info -->
+          <div class="mt-6">
+            <h3 class="font-semibold">Handled By:</h3>
+            <p class="text-sm">{{ selectedOrder?.handledBy }}</p>
+            <p class="text-sm text-blue-400 underline">
+              juandelacruz@gmail.com
+            </p>
+            <p class="text-sm">09384874855</p>
+          </div>
+
+          <!-- Timeline -->
+          <div class="mt-6">
+            <h3 class="font-semibold">Timeline</h3>
+            <ul class="mt-2 space-y-2 text-sm">
+              <li class="flex items-start gap-2">
+                <Check class="text-green-400" />
+                <span>
+                  <strong>The Document is being verified</strong>
+                  <p class="text-gray-400">Pending</p>
+                </span>
+              </li>
+              <li class="flex items-start gap-2">
+                <Clock class="text-yellow-400" />
+                <span>
+                  <strong>Document checked by supplier</strong>
+                  <p class="text-gray-400">In progress</p>
+                </span>
+              </li>
+              <li class="flex items-start gap-2">
+                <Check class="text-green-400" />
+                <span>
+                  <strong>Document was received</strong>
+                  <p class="text-gray-400">
+                    Document was received by supplier
+                    <span class="text-blue-400">John Doe</span>
+                  </p>
+                </span>
+              </li>
+            </ul>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -345,7 +430,7 @@ const closeModal = () => {
 
         <div class="flex justify-end gap-2">
           <button
-            @click="closeModal"
+            @click="closeModalAdd"
             class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400 transition"
           >
             Cancel
@@ -362,7 +447,6 @@ const closeModal = () => {
   </body>
 </template>
 
-<style scoped>
-</style>
+<style scoped></style>
 
 //test
