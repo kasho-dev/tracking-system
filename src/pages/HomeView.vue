@@ -29,6 +29,7 @@ interface Document {
   createdBy: string;
   dateCreated: string;
   status: string;
+  fileType?: string; // ✅ Add this to allow undefined values
 }
 
 // Search Query
@@ -57,7 +58,12 @@ const activeButton = ref("Documents"); // Default active button
 
 const setActive = (status: string) => {
   activeButton.value = status;
+
+    // Ensure "Documents" triggers download function
+
 };
+
+
 
 /// MODAL 2
 // Modal state
@@ -86,6 +92,8 @@ const documents = ref<Document[]>([
     createdBy: "Maria Santos",
     dateCreated: "March 10, 2025, 08:45:00 AM",
     status: "Completed",
+    fileType: "xlsx"
+
   },
   {
     id: 2,
@@ -95,6 +103,7 @@ const documents = ref<Document[]>([
     createdBy: "Juan Dela Cruz",
     dateCreated: "March 11, 2025, 02:30:15 PM",
     status: "Pending",
+    fileType: "xlsx"
   },
   {
     id: 3,
@@ -104,6 +113,7 @@ const documents = ref<Document[]>([
     createdBy: "Olivia Brown",
     dateCreated: "March 12, 2025, 11:15:45 AM",
     status: "Needs Action",
+    fileType: "xlsx"
   },
   {
     id: 4,
@@ -113,6 +123,7 @@ const documents = ref<Document[]>([
     createdBy: "Mia Martinez",
     dateCreated: "March 13, 2025, 06:50:30 PM",
     status: "Lapsed",
+    fileType: "xlsx"
   },
   {
     id: 5,
@@ -122,6 +133,7 @@ const documents = ref<Document[]>([
     createdBy: "Emma Wilson",
     dateCreated: "March 14, 2025, 07:20:10 AM",
     status: "Completed",
+    fileType: "xlsx"
   },
   {
     id: 6,
@@ -131,6 +143,7 @@ const documents = ref<Document[]>([
     createdBy: "Lucas White",
     dateCreated: "March 15, 2025, 04:10:22 PM",
     status: "Pending",
+    fileType: "xlsx"
   },
   {
     id: 7,
@@ -140,6 +153,7 @@ const documents = ref<Document[]>([
     createdBy: "Charlotte Lee",
     dateCreated: "March 16, 2025, 09:05:33 AM",
     status: "Lapsed",
+    fileType: "xlsx"
   },
   {
     id: 8,
@@ -149,6 +163,7 @@ const documents = ref<Document[]>([
     createdBy: "Henry Walker",
     dateCreated: "March 17, 2025, 03:45:18 PM",
     status: "Needs Action",
+    fileType: "xlsx"
   },
   {
     id: 9,
@@ -158,6 +173,7 @@ const documents = ref<Document[]>([
     createdBy: "Sophia Robinson",
     dateCreated: "March 18, 2025, 12:30:00 PM",
     status: "Lapsed",
+    fileType: "xlsx"
   },
   {
     id: 10,
@@ -167,6 +183,7 @@ const documents = ref<Document[]>([
     createdBy: "Lucas Hall",
     dateCreated: "March 19, 2025, 10:10:45 AM",
     status: "Lapsed",
+    fileType: "xlsx"
   },
 ]);
 
@@ -198,6 +215,11 @@ const deleteSelected = () => {
 };
 
 const toggleAllSelection = () => {
+  if (documents.value.length === 0) {
+    selectAll.value = false; // ✅ Force uncheck if no documents
+    return;
+  }
+
   const shouldSelectAll = !areAllSelected.value; // Toggle based on current state
 
   selectedDocuments.value = shouldSelectAll
@@ -225,16 +247,18 @@ const toggleOverlaySelection = (id: number) => {
 };
 
 const downloadSelectedDocuments = () => {
-  if (selectedDocuments.value.length === 0) return; // No selection, do nothing
-
+  // Filter selected documents that match the active status and are XLSX files
   const selectedDocs = selectedDocuments.value
-    .map((id) => documents.value.find((d) => d.id === id))
-    .filter((doc): doc is Document => !!doc); // Ensures only valid documents are included
+    .map((id) => documents.value.find((doc) => doc.id === id))
+    .filter((doc): doc is Document => !!doc && (activeButton.value === "Documents" || doc.status === activeButton.value) && doc.fileType === "xlsx");
 
-  if (selectedDocs.length === 0) return; // Prevent errors if no valid documents are found
+  if (selectedDocs.length === 0) {
+    alert("No XLSX files selected for the current status.");
+    return;
+  }
 
   if (selectedDocs.length === 1) {
-    // Single order selected - Name file based on Processing Order #
+    // Single document selected - Name file based on Order Number
     const doc = selectedDocs[0];
     const fileName = `${doc.orderNumber}.xlsx`;
 
@@ -253,7 +277,7 @@ const downloadSelectedDocuments = () => {
     XLSX.utils.book_append_sheet(workbook, worksheet, "Order Details");
     XLSX.writeFile(workbook, fileName);
   } else {
-    // Multiple orders selected - Name file as "Multiple Orders.xlsx"
+    // Multiple documents selected - Name file as "Multiple Orders.xlsx"
     const data = selectedDocs.map((doc) => ({
       "Order Number": doc.orderNumber,
       "Tracking ID": doc.trackingId,
@@ -288,12 +312,29 @@ const closeDeletePopup = () => {
 
 // Perform deletion and close popup
 const deleteSelectedDocuments = () => {
+  if (selectedDocuments.value.length === 0) {
+    alert("No documents selected for deletion.");
+    return;
+  }
+
+  // Keep only documents that are NOT selected
   documents.value = documents.value.filter(
-    (doc) => !documentsToDelete.value.includes(doc.id)
+    (doc) =>
+      !(selectedDocuments.value.includes(doc.id) && (activeButton.value === "Documents" || doc.status === activeButton.value))
   );
-  selectedDocuments.value = []; // Clear selection after deleting
-  showDeleteConfirmation.value = false;
+
+  // Clear selection after deleting
+  selectedDocuments.value = [];
+  showDeleteConfirmation.value = false; // Close confirmation modal
+
+
+  // ✅ Uncheck selectAll if no documents remain in the current view
+  // if (documents.value.length === 0 || (activeButton.value === "Documents" && documents.value.filter(doc => doc.status === "Documents").length === 0)) {
+  //   selectAll.value = false;
+  // }
 };
+
+
 
 //Checkbox Change Icon Function
 const handleCheckboxChange = (id: number) => {
