@@ -5,6 +5,8 @@
 // import { defineStore } from "pinia";
 import { ref, computed } from "vue";
 import { useSearchStore } from "/workspaces/tracking-system/src/stores/searchStore.ts"; // Import the Pinia store
+import * as XLSX from "xlsx";
+
 const searchStore = useSearchStore(); // ✅ Initialize store
 
 import {
@@ -19,7 +21,8 @@ import {
   Icon,
   X,
 } from "lucide-vue-next";
-import * as XLSX from "xlsx";
+
+
 
 // Define the type for documents
 interface Document {
@@ -29,6 +32,7 @@ interface Document {
   handledBy: string;
   createdBy: string;
   dateCreated: string;
+  status: string;
 }
 
 // Search Query
@@ -53,10 +57,10 @@ const submitPO = () => {
   closeModalAdd();
 };
 
-const activeButton = ref("Completed"); // Default active button
+const activeButton = ref("Documents"); // Default active button
 
-const setActive = (buttonName: string) => {
-  activeButton.value = buttonName;
+const setActive = (status: string) => {
+  activeButton.value = status;
 };
 
 /// MODAL 2
@@ -85,6 +89,7 @@ const documents = ref<Document[]>([
     handledBy: "Juan Dela Cruz",
     createdBy: "Maria Santos",
     dateCreated: "March 10, 2025, 08:45:00 AM",
+    status: "Completed",
   },
   {
     id: 2,
@@ -93,6 +98,7 @@ const documents = ref<Document[]>([
     handledBy: "Coco Hardin",
     createdBy: "Juan Dela Cruz",
     dateCreated: "March 11, 2025, 02:30:15 PM",
+    status: "Pending",
   },
   {
     id: 3,
@@ -101,6 +107,7 @@ const documents = ref<Document[]>([
     handledBy: "Liam Johnson",
     createdBy: "Olivia Brown",
     dateCreated: "March 12, 2025, 11:15:45 AM",
+    status: "Needs Action",
   },
   {
     id: 4,
@@ -109,6 +116,7 @@ const documents = ref<Document[]>([
     handledBy: "Sophia Garcia",
     createdBy: "Mia Martinez",
     dateCreated: "March 13, 2025, 06:50:30 PM",
+    status: "Lapsed",
   },
   {
     id: 5,
@@ -117,6 +125,7 @@ const documents = ref<Document[]>([
     handledBy: "Noah Smith",
     createdBy: "Emma Wilson",
     dateCreated: "March 14, 2025, 07:20:10 AM",
+    status: "Completed",
   },
   {
     id: 6,
@@ -125,6 +134,7 @@ const documents = ref<Document[]>([
     handledBy: "Ava Thomas",
     createdBy: "Lucas White",
     dateCreated: "March 15, 2025, 04:10:22 PM",
+    status: "Pending",
   },
   {
     id: 7,
@@ -133,6 +143,7 @@ const documents = ref<Document[]>([
     handledBy: "James Davis",
     createdBy: "Charlotte Lee",
     dateCreated: "March 16, 2025, 09:05:33 AM",
+    status: "Lapsed",
   },
   {
     id: 8,
@@ -141,6 +152,7 @@ const documents = ref<Document[]>([
     handledBy: "Ella Harris",
     createdBy: "Henry Walker",
     dateCreated: "March 17, 2025, 03:45:18 PM",
+    status: "Needs Action",
   },
   {
     id: 9,
@@ -149,6 +161,7 @@ const documents = ref<Document[]>([
     handledBy: "William Lewis",
     createdBy: "Sophia Robinson",
     dateCreated: "March 18, 2025, 12:30:00 PM",
+    status: "Lapsed",
   },
   {
     id: 10,
@@ -157,11 +170,9 @@ const documents = ref<Document[]>([
     handledBy: "Benjamin Carter",
     createdBy: "Lucas Hall",
     dateCreated: "March 19, 2025, 10:10:45 AM",
+    status: "Lapsed",
   },
-
-  
 ]);
-
 
 //Checkbox Function
 const selectedDocuments = ref<number[]>([]);
@@ -174,6 +185,7 @@ const toggleSelection = (id: number) => {
     selectedDocuments.value.push(id); // Add to selected if not already checked
   }
 };
+
 //Delete Selected Checkbox Function
 const deleteSelected = () => {
   documents.value = documents.value.filter(
@@ -181,7 +193,6 @@ const deleteSelected = () => {
   );
   selectedDocuments.value = []; // Clear selection after deletion
 };
-
 
 //Download Function
 const selectedOverlayDocuments = ref<number[]>([]);
@@ -199,7 +210,7 @@ const downloadSelectedDocuments = () => {
   if (selectedDocuments.value.length === 0) return; // No selection, do nothing
 
   const selectedDocs = selectedDocuments.value
-    .map(id => documents.value.find(d => d.id === id))
+    .map((id) => documents.value.find((d) => d.id === id))
     .filter((doc): doc is Document => !!doc); // Ensures only valid documents are included
 
   if (selectedDocs.length === 0) return; // Prevent errors if no valid documents are found
@@ -209,27 +220,28 @@ const downloadSelectedDocuments = () => {
     const doc = selectedDocs[0];
     const fileName = `${doc.orderNumber}.xlsx`;
 
-    const data = [{
-      "Order Number": doc.orderNumber,
-      "Tracking ID": doc.trackingId,
-      "Handled By": doc.handledBy,
-      "Created By": doc.createdBy,
-      "Date Created": doc.dateCreated
-    }];
+    const data = [
+      {
+        "Order Number": doc.orderNumber,
+        "Tracking ID": doc.trackingId,
+        "Handled By": doc.handledBy,
+        "Created By": doc.createdBy,
+        "Date Created": doc.dateCreated,
+      },
+    ];
 
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Order Details");
     XLSX.writeFile(workbook, fileName);
-
   } else {
     // Multiple orders selected - Name file as "Multiple Orders.xlsx"
-    const data = selectedDocs.map(doc => ({
+    const data = selectedDocs.map((doc) => ({
       "Order Number": doc.orderNumber,
       "Tracking ID": doc.trackingId,
       "Handled By": doc.handledBy,
       "Created By": doc.createdBy,
-      "Date Created": doc.dateCreated
+      "Date Created": doc.dateCreated,
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(data);
@@ -238,7 +250,6 @@ const downloadSelectedDocuments = () => {
     XLSX.writeFile(workbook, "Multiple Orders.xlsx");
   }
 };
-
 
 //Confirm Delete Function
 const showDeleteConfirmation = ref(false); // Controls popup visibility
@@ -259,7 +270,9 @@ const closeDeletePopup = () => {
 
 // Perform deletion and close popup
 const deleteSelectedDocuments = () => {
-  documents.value = documents.value.filter(doc => !documentsToDelete.value.includes(doc.id));
+  documents.value = documents.value.filter(
+    (doc) => !documentsToDelete.value.includes(doc.id)
+  );
   selectedDocuments.value = []; // Clear selection after deleting
   showDeleteConfirmation.value = false;
 };
@@ -270,28 +283,52 @@ const handleCheckboxChange = (id: number) => {
   toggleOverlaySelection(id); // Handles selection for download function
 };
 
-
 // Computed property to filter documents
 const filteredDocuments = computed(() => {
-  if (!searchStore.searchQuery) return documents.value;
+  let filtered = documents.value;
 
-  return documents.value.filter((doc) =>
-    Object.values(doc).some((field) =>
-      String(field)
-        .toLowerCase()
-        .includes(searchStore.searchQuery.toLowerCase())
-    )
-  );
+  // Apply search filter if there's a query
+  if (searchStore.searchQuery) {
+    filtered = filtered.filter((doc) =>
+      Object.values(doc).some((field) =>
+        String(field)
+          .toLowerCase()
+          .includes(searchStore.searchQuery.toLowerCase())
+      )
+    );
+  }
+
+  // Filter Table Documents base on Active Button
+  if (activeButton.value === "Completed") {
+    filtered = filtered.filter((doc) => doc.status === "Completed");
+  } else if (activeButton.value === "Document") {
+    filtered = filtered.filter((doc) => doc.status === "Document"); 
+  
+  } else if (activeButton.value === "Lapsed") {
+    filtered = filtered.filter((doc) => doc.status === "Lapsed"); 
+  
+  } else if (activeButton.value === "Needs Action") {
+    filtered = filtered.filter((doc) => doc.status === "Needs Action"); 
+  
+  } else if (activeButton.value === "Pending") {
+    filtered = filtered.filter((doc) => doc.status === "Pending"); 
+  }
+    return filtered;
+});
+
+// Computed property: Count documents by status
+const statusCounts = computed(() => {
+  return documents.value.reduce((acc, doc) => {
+    acc[doc.status] = (acc[doc.status] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
 });
 </script>
 
-
-
-
 <template>
-  <body class="bg-[#0A0E1A] flex h-screen p-4">
+  
+  <body class="bg-[#0A0E1A] flex h-screen p-4 max-h-[683px]">
 
-    
     <!-- Add PO Document Button -->
     <div class="w-64 bg-[#0A0E1A] text-white mr-4 rounded-lg">
       <button
@@ -317,45 +354,56 @@ const filteredDocuments = computed(() => {
         Add Processing Order
       </button>
 
-
       <!-- PO Document Creation Modal -->
-    <div
-      v-if="showModal"
-      class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center"
-    >
-      <div class="bg-[#0B132B] p-6 rounded-lg shadow-md w-96">
-        <h2 class="text-lg font-semibold mb-4 text-white text-center">
-          Enter PO File Name
-        </h2>
+      <div
+        v-if="showModal"
+        class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center"
+      >
+        <div class="bg-[#0B132B] p-6 rounded-lg shadow-md w-96">
+          <h2 class="text-lg font-semibold mb-4 text-white text-center">
+            Enter PO File Name
+          </h2>
 
-        <input
-          v-model="poNumber"
-          type="text"
-          placeholder="eg. Processing Order #"
-          class="w-full p-2 border rounded-md mb-4"
-        />
+          <input
+            v-model="poNumber"
+            type="text"
+            placeholder="eg. Processing Order #"
+            class="w-full p-2 border rounded-md mb-4 text-black"
+          />
 
-        <div class="flex justify-end gap-2">
-          <button
-            @click="closeModalAdd"
-            class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400 transition"
-          >
-            Cancel
-          </button>
-          <button
-            @click="submitPO"
-            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
-          >
-            Submit
-          </button>
+          <div class="flex justify-end gap-2">
+            <button
+              @click="closeModalAdd"
+              class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400 transition"
+            >
+              Cancel
+            </button>
+            <button
+              @click="submitPO"
+              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
+            >
+              Create Order
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-
 
       <!--Sidebar Buttons-->
 
       <div class="mt-4 space-y-2">
+               <!-- Documents (All) -->
+               <div
+          @click="setActive('Documents')"
+          class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer"
+          :class="
+            activeButton === 'Documents'
+              ? 'bg-[#2E3347] text-purple-400'
+              : 'text-purple-400 hover:bg-[#2E3347]'
+          "
+        >
+          <span class="flex items-center gap-2"><File /> Documents </span>
+          <span class="text-white">{{ documents.length }}</span>
+        </div>
         <!-- Completed -->
         <div
           @click="setActive('Completed')"
@@ -366,11 +414,8 @@ const filteredDocuments = computed(() => {
               : 'text-green-400 hover:bg-[#2E3347]'
           "
         >
-          <span class="flex items-center gap-2">
-            <Check />
-            Completed
-          </span>
-          <span class="text-white">0</span>
+          <span class="flex items-center gap-2"><Check /> Completed</span>
+          <span class="text-white">{{ statusCounts.Completed || 0 }}</span>
         </div>
 
         <!-- Pending -->
@@ -383,11 +428,8 @@ const filteredDocuments = computed(() => {
               : 'text-purple-400 hover:bg-[#2E3347]'
           "
         >
-          <span class="flex items-center gap-2">
-            <Clock />
-            Pending
-          </span>
-          <span class="text-white">0</span>
+          <span class="flex items-center gap-2"><Clock /> Pending</span>
+          <span class="text-white">{{ statusCounts.Pending || 0 }}</span>
         </div>
 
         <!-- Lapsed -->
@@ -400,17 +442,8 @@ const filteredDocuments = computed(() => {
               : 'text-yellow-400 hover:bg-[#2E3347]'
           "
         >
-          <span class="flex items-center gap-2">
-            <TriangleAlert />
-            <span class="relative">
-              <span
-                class="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-4 h-4 flex items-center justify-center rounded-full"
-                >!</span
-              >
-            </span>
-            Lapsed
-          </span>
-          <span class="text-white">0</span>
+          <span class="flex items-center gap-2"><TriangleAlert /> Lapsed</span>
+          <span class="text-white">{{ statusCounts.Lapsed || 0 }}</span>
         </div>
 
         <!-- Needs Action -->
@@ -423,54 +456,45 @@ const filteredDocuments = computed(() => {
               : 'text-red-500 hover:bg-[#2E3347]'
           "
         >
-          <span class="flex items-center gap-2">
-            <User />
-            <span class="relative">
-              <span
-                class="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-4 h-4 flex items-center justify-center rounded-full"
-                >!</span
-              >
-            </span>
-            Needs action
-          </span>
-          <span class="text-white">0</span>
+          <span class="flex items-center gap-2"><User /> Needs Action</span>
+          <span class="text-white">{{
+            statusCounts["Needs Action"] || 0
+          }}</span>
         </div>
 
-        <!-- Documents -->
-        <div
-          @click="setActive('Documents')"
-          class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer"
-          :class="
-            activeButton === 'Documents'
-              ? 'bg-[#2E3347] text-purple-400'
-              : 'text-purple-400 hover:bg-[#2E3347]'
-          "
-        >
-          <span class="flex items-center gap-2">
-            <File />
-            Documents <span class="text-red-500">🔔</span>
-          </span>
-          <span class="text-white">0</span>
-        </div>
+ 
       </div>
     </div>
 
-    <!-- Data Table Background -->
+    <!-- Data Table -->
     <div class="p-6 flex-grow bg-white rounded-lg shadow-md">
-      <h1 class="text-2xl font-bold mb-4">ALL DOCUMENTS</h1>
+      <h1 class="text-2xl font-bold mb-4">
+        <span>
+          {{ activeButton.toUpperCase() }}
+          <span v-if="activeButton.toUpperCase() !== 'DOCUMENTS'"
+            >DOCUMENT</span
+          >
+        </span>
+      </h1>
 
       <!-- Action Buttons with Lucide Icons -->
       <div class="flex space-x-4 mb-4">
-        <button class="p-2 bg-gray-100 rounded hover:bg-gray-300 transition" @click="downloadSelectedDocuments">
+        <button
+          class="p-2 bg-gray-100 rounded hover:bg-gray-300 transition"
+          @click="downloadSelectedDocuments"
+        >
           <Download />
         </button>
-        <button class="p-2 bg-gray-100 rounded hover:bg-gray-300 transition" @click="confirmDelete">
-  <Trash />
-</button>
-
-        <button class="p-2 bg-gray-100 rounded hover:bg-gray-300 transition">
-          <Ellipsis />
+        <button
+          class="p-2 bg-gray-100 rounded hover:bg-gray-300 transition"
+          @click="confirmDelete"
+        >
+          <Trash />
         </button>
+
+        <!-- <button class="p-2 bg-gray-100 rounded hover:bg-gray-300 transition">
+          <Ellipsis />
+        </button> -->
       </div>
 
       <!-- Table Header (Fixed) -->
@@ -492,7 +516,7 @@ const filteredDocuments = computed(() => {
 
       <!-- Scrollable Table Body -->
       <div
-        class="border border-t-0 rounded-b-lg overflow-auto w-full max-h-[550px]"
+        class="border border-t-0 rounded-b-lg overflow-auto w-full max-h-[450px]"
       >
         <table class="w-full border-collapse bg-white">
           <tbody>
@@ -501,13 +525,17 @@ const filteredDocuments = computed(() => {
               :key="doc.id"
               class="border-b hover:bg-gray-50 text-sm transition"
             >
-              <td class="p-3">
-                <input type="checkbox" class="w-4 h-4" :checked="selectedDocuments.includes(doc.id)"
-                @change="handleCheckboxChange(doc.id)"/>
-                </td>
               <td class="p-3 pl-12">
-                <input type="checkbox" class="w-4 h-4" />
+                <input
+                  type="checkbox"
+                  class="w-4 h-4"
+                  :checked="selectedDocuments.includes(doc.id)"
+                  @change="handleCheckboxChange(doc.id)"
+                />
               </td>
+              <!-- <td class="p-3 pl-12">
+                <input type="checkbox" class="w-4 h-4" />
+              </td> -->
               <td class="p-3">
                 <a
                   href="#"
@@ -599,24 +627,39 @@ const filteredDocuments = computed(() => {
       </div>
     </div>
 
-    
-
     <!-- Delete Confirmation Popup -->
-<div v-if="showDeleteConfirmation" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-  <div class="bg-white p-6 rounded-lg shadow-lg w-96">
-    <h2 class="text-lg font-semibold mb-4">Confirm Deletion</h2>
-    <p class="text-gray-600">Are you sure you want to delete the selected documents? This action cannot be undone.</p>
-    
-    <div class="mt-6 flex justify-end space-x-4">
-      <button @click="closeDeletePopup" class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400 transition">Cancel</button>
-      <button @click="deleteSelectedDocuments" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition">Delete</button>
-    </div>
-  </div>
-</div>
+    <div
+      v-if="showDeleteConfirmation"
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    >
+      <div class="bg-white p-6 rounded-lg shadow-lg w-96">
+        <h2 class="text-lg font-semibold mb-4">Confirm Deletion</h2>
+        <p class="text-gray-600">
+          Are you sure you want to delete the selected documents? This action
+          cannot be undone.
+        </p>
 
+        <div class="mt-6 flex justify-end space-x-4">
+          <button
+            @click="closeDeletePopup"
+            class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400 transition"
+          >
+            Cancel
+          </button>
+          <button
+            @click="deleteSelectedDocuments"
+            class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
   </body>
 </template>
 
-<style scoped></style>
-
-//test
+<style scoped>
+/* body {
+  overflow: hidden;
+} */
+</style>
