@@ -3,7 +3,7 @@
 // import Vue from "../assets/vue.svg";
 // import Button from "primevue/button";
 // import { defineStore } from "pinia";
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import { useSearchStore } from "/workspaces/tracking-system/src/stores/searchStore.ts"; // Import the Pinia store
 import * as XLSX from "xlsx";
 
@@ -17,12 +17,8 @@ import {
   TriangleAlert,
   Download,
   Trash,
-  Ellipsis,
-  Icon,
   X,
 } from "lucide-vue-next";
-
-
 
 // Define the type for documents
 interface Document {
@@ -175,7 +171,14 @@ const documents = ref<Document[]>([
 ]);
 
 //Checkbox Function
+const selectAll = ref(false);
 const selectedDocuments = ref<number[]>([]);
+
+// Check if all checkboxes are selected
+const areAllSelected = computed(() => 
+  selectedDocuments.value.length === documents.value.length
+);
+
 
 const toggleSelection = (id: number) => {
   const index = selectedDocuments.value.indexOf(id);
@@ -193,6 +196,21 @@ const deleteSelected = () => {
   );
   selectedDocuments.value = []; // Clear selection after deletion
 };
+
+const toggleAllSelection = () => {
+  const shouldSelectAll = !areAllSelected.value; // Toggle based on current state
+
+  selectedDocuments.value = shouldSelectAll
+    ? documents.value.map((doc) => doc.id) // Select all
+    : []; // Deselect all
+
+  selectAll.value = shouldSelectAll; // Keep selectAll state updated
+};
+
+// Watch for individual checkbox changes and update "Select All" state
+watch(selectedDocuments, (newVal) => {
+  selectAll.value = newVal.length === documents.value.length; // If all are selected, check header
+});
 
 //Download Function
 const selectedOverlayDocuments = ref<number[]>([]);
@@ -302,18 +320,15 @@ const filteredDocuments = computed(() => {
   if (activeButton.value === "Completed") {
     filtered = filtered.filter((doc) => doc.status === "Completed");
   } else if (activeButton.value === "Document") {
-    filtered = filtered.filter((doc) => doc.status === "Document"); 
-  
+    filtered = filtered.filter((doc) => doc.status === "Document");
   } else if (activeButton.value === "Lapsed") {
-    filtered = filtered.filter((doc) => doc.status === "Lapsed"); 
-  
+    filtered = filtered.filter((doc) => doc.status === "Lapsed");
   } else if (activeButton.value === "Needs Action") {
-    filtered = filtered.filter((doc) => doc.status === "Needs Action"); 
-  
+    filtered = filtered.filter((doc) => doc.status === "Needs Action");
   } else if (activeButton.value === "Pending") {
-    filtered = filtered.filter((doc) => doc.status === "Pending"); 
+    filtered = filtered.filter((doc) => doc.status === "Pending");
   }
-    return filtered;
+  return filtered;
 });
 
 // Computed property: Count documents by status
@@ -326,9 +341,7 @@ const statusCounts = computed(() => {
 </script>
 
 <template>
-  
   <body class="bg-[#0A0E1A] flex h-screen p-4 max-h-[683px]">
-
     <!-- Add PO Document Button -->
     <div class="w-64 bg-[#0A0E1A] text-white mr-4 rounded-lg">
       <button
@@ -391,8 +404,8 @@ const statusCounts = computed(() => {
       <!--Sidebar Buttons-->
 
       <div class="mt-4 space-y-2">
-               <!-- Documents (All) -->
-               <div
+        <!-- Documents (All) -->
+        <div
           @click="setActive('Documents')"
           class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer"
           :class="
@@ -461,8 +474,6 @@ const statusCounts = computed(() => {
             statusCounts["Needs Action"] || 0
           }}</span>
         </div>
-
- 
       </div>
     </div>
 
@@ -503,7 +514,12 @@ const statusCounts = computed(() => {
           <thead>
             <tr class="text-gray-600 text-sm">
               <th class="p-3 pr-5">
-                <input type="checkbox" class="w-4 h-4" />
+                <input
+                  type="checkbox"
+                  class="w-4 h-4"
+                  v-model="selectAll"
+                  @change="toggleAllSelection"
+                />
               </th>
               <th class="p-0">Order #</th>
               <th class="p-0">Handled by</th>
@@ -523,14 +539,14 @@ const statusCounts = computed(() => {
             <tr
               v-for="doc in filteredDocuments"
               :key="doc.id"
-              class="border-b hover:bg-gray-50 text-sm transition"
+              class="border-b hover:bg-gray-200 text-sm transition"
             >
               <td class="p-3 pl-12">
                 <input
                   type="checkbox"
                   class="w-4 h-4"
-                  :checked="selectedDocuments.includes(doc.id)"
-                  @change="handleCheckboxChange(doc.id)"
+                  :value="doc.id"
+                  v-model="selectedDocuments"
                 />
               </td>
               <!-- <td class="p-3 pl-12">
@@ -555,6 +571,8 @@ const statusCounts = computed(() => {
       </div>
     </div>
 
+
+    <!-- Overlay -->
     <div
       v-if="isModalOpen"
       class="fixed inset-0 bg-black bg-opacity-50 flex justify-end"
