@@ -378,8 +378,8 @@ const statusCounts = computed(() => {
     <div class="w-64 bg-[#0A0E1A] text-white mr-4 rounded-lg">
       <button
     @click="openModalAdd"
-    class="w-full flex items-center justify-center gap-2 bg-[#6A5CFE] text-white text-sm font-semibold py-3 rounded-xl hover:bg-[#7C6CFF] transition"
-  >
+    class="w-full flex items-center justify-center gap-2 bg-[#6A5CFE] text-white text-sm font-semibold py-3 rounded-xl hover:bg-[#7C6CFF] active:bg-[#5A4BD9] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 ease-out"
+    >
     <svg
       xmlns="http://www.w3.org/2000/svg"
       width="20"
