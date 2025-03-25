@@ -11,6 +11,8 @@ import PocketBase from 'pocketbase';
 const pb = new PocketBase('http://127.0.0.1:8090');
 
 
+
+
 const searchStore = useSearchStore(); // ✅ Initialize store
 
 import {
@@ -125,7 +127,7 @@ const documents = ref<Document[]>([
     trackingId: "983472983742983",
     handledBy: "Juan Dela Cruz",
     createdBy: "Maria Santos",
-    dateCreated: "March 10, 2025, 08:45:00 AM",
+    dateCreated: "3/10/2025, 08:45:00 AM",
     status: "Completed",
     fileType: "xlsx"
 
@@ -136,7 +138,7 @@ const documents = ref<Document[]>([
     trackingId: "349857293847593",
     handledBy: "Coco Hardin",
     createdBy: "Juan Dela Cruz",
-    dateCreated: "March 11, 2025, 02:30:15 PM",
+    dateCreated: "3/11/2025, 02:30:15 PM",
     status: "Pending",
     fileType: "xlsx"
   },
@@ -146,7 +148,7 @@ const documents = ref<Document[]>([
     trackingId: "234978234789234",
     handledBy: "Liam Johnson",
     createdBy: "Olivia Brown",
-    dateCreated: "March 12, 2025, 11:15:45 AM",
+    dateCreated: "3/12/2025, 11:15:45 AM",
     status: "Needs Action",
     fileType: "xlsx"
   },
@@ -156,7 +158,7 @@ const documents = ref<Document[]>([
     trackingId: "987238947238947",
     handledBy: "Sophia Garcia",
     createdBy: "Mia Martinez",
-    dateCreated: "March 13, 2025, 06:50:30 PM",
+    dateCreated: "3/13/2025, 06:50:30 PM",
     status: "Lapsed",
     fileType: "xlsx"
   },
@@ -166,7 +168,7 @@ const documents = ref<Document[]>([
     trackingId: "238947923847928",
     handledBy: "Noah Smith",
     createdBy: "Emma Wilson",
-    dateCreated: "March 14, 2025, 07:20:10 AM",
+    dateCreated: "3/14/2025, 07:20:10 AM",
     status: "Completed",
     fileType: "xlsx"
   },
