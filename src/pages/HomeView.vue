@@ -38,6 +38,31 @@ interface Document {
   fileType?: string; // ✅ Add this to allow undefined values
 }
 
+// Store the user data
+const tassadarUser = ref<any>(null); 
+
+// Fetch the user by email or ID
+const fetchTassadarUser = async () => {
+  try {
+    // METHOD 1: Get by email (if you know it)
+    tassadarUser.value = await pb.collection('users').getFirstListItem(
+      'email="logangster86@gmail.com"'
+    );
+    
+    // OR METHOD 2: Get by ID (from your screenshot)
+    // tassadarUser.value = await pb.collection('users').getOne("Rigm2021984p");
+    
+    console.log("Fetched user:", tassadarUser.value);
+  } catch (error) {
+    console.error("Error fetching user:", error);
+    // Fallback to hardcoded name if fetch fails
+    tassadarUser.value = { name: "tassadar" }; 
+  }
+};
+
+// Call this when your component mounts
+fetchTassadarUser();
+
 // Search Query
 const searchQuery = ref("");
 
@@ -62,32 +87,30 @@ const submitPO = async () => {
   }
 
   const data = {
-    Order_No: poNumber.value, // Use the PO number entered by the user
-    trackingId: `seq${Math.floor(Math.random() * 1000000)}`, // Generate a random tracking ID
-    handledBy: "System", // Default handler
-    createdBy: "Admin", // Default creator
-    status: "Pending", // Default status
+    Order_No: poNumber.value,
+    trackingId: `seq${Math.floor(Math.random() * 1000000)}`,
+    handledBy: "N/A",
+    createdBy: tassadarUser.value?.name || "tassadar", // Dynamic fallback
+    status: "Pending",
   };
 
   try {
-    // Save the new order to PocketBase
     const record = await pb.collection('Collection_1').create(data);
-
-    // Add the new order to the documents array
+    
     documents.value.push({
-      id: record.id, // Use PocketBase record ID
-      orderNumber: `Processing Order #${record.Order_No}`, // Map Order_No to orderNumber
+      id: record.id,
+      orderNumber: `${record.Order_No}`,
       trackingId: record.trackingId,
       handledBy: record.handledBy,
-      createdBy: record.createdBy,
-      dateCreated: new Date(record.created).toLocaleString(), // Format the creation date
+      createdBy: record.createdBy, // Will show "tassadar"
+      dateCreated: new Date(record.created).toLocaleString(),
       status: record.status,
     });
 
     closeModalAdd();
   } catch (error) {
-    console.error("Error creating record:", error);
-    alert("Failed to create the order. Please try again.");
+    console.error("Error:", error);
+    alert("Failed to create order.");
   }
 };
 
@@ -374,7 +397,7 @@ const statusCounts = computed(() => {
         d="m16 6-8.414 8.586a2 2 0 0 0 0 2.828 2 2 0 0 0 2.828 0l8.414-8.586a4 4 0 0 0 0-5.656 4 4 0 0 0-5.656 0l-8.415 8.585a6 6 0 1 0 8.486 8.486"
       />
     </svg>
-    Add Processing Order
+    Add Purchasing Order
   </button>
 
   <!-- Processing Order Creation Modal -->
@@ -384,13 +407,13 @@ const statusCounts = computed(() => {
   >
     <div class="bg-[#0B132B] p-6 rounded-lg shadow-md w-96">
       <h2 class="text-lg font-semibold mb-4 text-white text-center">
-        Enter Order Number
+        Enter PO Number
       </h2>
 
       <input
         v-model="poNumber"
         type="text"
-        placeholder="eg. Processing Order #"
+        placeholder="eg. APO2025-2024"
         class="w-full p-2 border rounded-md mb-4 text-black"
       />
 
