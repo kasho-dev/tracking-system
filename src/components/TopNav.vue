@@ -16,11 +16,13 @@ const searchStore = useSearchStore();
 </script>
 
 <template>
-  <Toolbar class="rounded-none border-x-0 border-t-0 bg-[#0A0E1A] text-white">
+  <Toolbar
+    class="rounded-none border-x-0 border-t-0 border-b-0 bg-[#0A0E1A] text-white"
+  >
     <template #start>
       <div class="flex gap-6">
         <div class="flex gap-3">
-          <div class="flex items-center gap-2 p-4">
+          <div class="flex items-center gap-2 p-4 pb-1">
             <!-- <img src="" alt="Marka Logo" class="w-8 h-8">  -->
             <h1 class="text-lg font-bold">MARKA</h1>
           </div>
@@ -28,13 +30,16 @@ const searchStore = useSearchStore();
       </div>
     </template>
     <template #end>
+      <div class="pr-5 text-white font-bold text-lg font-size-150px pt-4">
+        Welcome, User!
+      </div>
       <!-- Search Input -->
-      <div class="relative">
+      <div class="relative mt-3 group">
         <input
           v-model="searchStore.searchQuery"
           type="text"
           placeholder="Search..."
-          class="bg-gray-100 text-black px-4 py-2 rounded-lg w-64 focus:outline-none pr-10"
+          class="bg-gray-100 text-black px-3 py-2 rounded-lg w-64 focus:outline-none pr-10 placeholder:opacity-100 placeholder:transition-all placeholder:duration-300 group-hover:placeholder:opacity-100 group-hover:placeholder:translate-x-2"
         />
         <span class="absolute right-3 top-2 text-gray-500">
           <svg

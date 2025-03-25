@@ -3,7 +3,7 @@
 // import Vue from "../assets/vue.svg";
 // import Button from "primevue/button";
 // import { defineStore } from "pinia";
-import { ref, computed, watch } from "vue";
+import { onMounted, ref, computed, watch } from "vue";
 import { useSearchStore } from "/workspaces/tracking-system/src/stores/searchStore.ts"; // Import the Pinia store
 import * as XLSX from "xlsx";
 
@@ -80,6 +80,36 @@ const closeModalAdd = () => {
   poNumber.value = ""; // Reset input field when closed
 };
 
+// Code block for fetching data from PocketBase
+onMounted(() => {
+  fetchDocuments();
+});
+
+const fetchDocuments = async () => {
+  try {
+    // Fetch all records from Collection_1
+    const records = await pb.collection("Collection_1").getFullList({
+      sort: "-created", // Sort by creation date (newest first)
+    });
+
+    // Map the records to the Document interface format
+    documents.value = records.map((record) => ({
+      id: record.id,
+      orderNumber: `Processing Order #${record.Order_No}`,
+      trackingId: record.trackingId,
+      handledBy: record.handledBy,
+      createdBy: record.createdBy,
+      dateCreated: new Date(record.created).toLocaleString(),
+      status: record.status,
+      fileType: "xlsx", // Assuming all documents are XLSX files
+    }));
+  } catch (error) {
+    console.error("Error fetching documents:", error);
+    alert("Failed to load documents. Please try again.");
+  }
+};
+
+// Submit PO to Database
 const submitPO = async () => {
   if (!poNumber.value) {
     alert("Please enter an order number.");
@@ -87,11 +117,11 @@ const submitPO = async () => {
   }
 
   const data = {
-    Order_No: poNumber.value,
-    trackingId: `seq${Math.floor(Math.random() * 1000000)}`,
-    handledBy: "N/A",
-    createdBy: tassadarUser.value?.name || "tassadar", // Dynamic fallback
-    status: "Pending",
+    Order_No: poNumber.value, // Use the PO number entered by the user
+    trackingId: `seq${Math.floor(Math.random() * 1000000)}`, // Generate a random tracking ID
+    handledBy: "System", // Default handler
+    createdBy: "Admin", // Default creator
+    status: "Pending", // Default status
   };
 
   try {
@@ -105,6 +135,7 @@ const submitPO = async () => {
       createdBy: record.createdBy, // Will show "tassadar"
       dateCreated: new Date(record.created).toLocaleString(),
       status: record.status,
+      fileType: "xlsx", // Add this line
     });
 
     closeModalAdd();
@@ -119,11 +150,8 @@ const activeButton = ref("Documents"); // Default active button
 const setActive = (status: string) => {
   activeButton.value = status;
 
-    // Ensure "Documents" triggers download function
-
+  // Ensure "Documents" triggers download function
 };
-
-
 
 /// MODAL 2
 // Modal state
@@ -143,71 +171,19 @@ const closeModal = () => {
 };
 
 //Documents Data
-const documents = ref<Document[]>([
-  {
-    id: "1",
-    orderNumber: "Processing Order #1",
-    trackingId: "983472983742983",
-    handledBy: "Juan Dela Cruz",
-    createdBy: "Maria Santos",
-    dateCreated: "3/10/2025, 08:45:00 AM",
-    status: "Completed",
-    fileType: "xlsx"
-
-  },
-  {
-    id: "2",
-    orderNumber: "Processing Order #2",
-    trackingId: "349857293847593",
-    handledBy: "Coco Hardin",
-    createdBy: "Juan Dela Cruz",
-    dateCreated: "3/11/2025, 02:30:15 PM",
-    status: "Pending",
-    fileType: "xlsx"
-  },
-  {
-    id: "3",
-    orderNumber: "Processing Order #3",
-    trackingId: "234978234789234",
-    handledBy: "Liam Johnson",
-    createdBy: "Olivia Brown",
-    dateCreated: "3/12/2025, 11:15:45 AM",
-    status: "Needs Action",
-    fileType: "xlsx"
-  },
-  {
-    id: "4",
-    orderNumber: "Processing Order #4",
-    trackingId: "987238947238947",
-    handledBy: "Sophia Garcia",
-    createdBy: "Mia Martinez",
-    dateCreated: "3/13/2025, 06:50:30 PM",
-    status: "Lapsed",
-    fileType: "xlsx"
-  },
-  {
-    id: "5",
-    orderNumber: "Processing Order #5",
-    trackingId: "238947923847928",
-    handledBy: "Noah Smith",
-    createdBy: "Emma Wilson",
-    dateCreated: "3/14/2025, 07:20:10 AM",
-    status: "Completed",
-    fileType: "xlsx"
-  },
-  
-]);
+const documents = ref<Document[]>([]);
 
 //Checkbox Function
 const selectAll = ref(false);
 const selectedDocuments = ref<string[]>([]);
 
 // Check if all checkboxes are selected
-const areAllSelected = computed(() => 
-  selectedDocuments.value.length === documents.value.length
+const areAllSelected = computed(
+  () => selectedDocuments.value.length === documents.value.length
 );
 
-const toggleSelection = (id: string) => { // Changed parameter type
+const toggleSelection = (id: string) => {
+  // Changed parameter type
   const index = selectedDocuments.value.indexOf(id);
   if (index > -1) {
     selectedDocuments.value.splice(index, 1);
@@ -240,7 +216,8 @@ watch(selectedDocuments, (newVal) => {
 //Download Function
 const selectedOverlayDocuments = ref<string[]>([]);
 
-const toggleOverlaySelection = (id: string) => { // Changed parameter type
+const toggleOverlaySelection = (id: string) => {
+  // Changed parameter type
   const index = selectedOverlayDocuments.value.indexOf(id);
   if (index > -1) {
     selectedOverlayDocuments.value.splice(index, 1);
@@ -253,7 +230,12 @@ const downloadSelectedDocuments = () => {
   // Filter selected documents that match the active status and are XLSX files
   const selectedDocs = selectedDocuments.value
     .map((id) => documents.value.find((doc) => doc.id === id))
-    .filter((doc): doc is Document => !!doc && (activeButton.value === "Documents" || doc.status === activeButton.value) && doc.fileType === "xlsx");
+    .filter(
+      (doc): doc is Document =>
+        !!doc &&
+        (activeButton.value === "Documents" ||
+          doc.status === activeButton.value)
+    );
 
   if (selectedDocs.length === 0) {
     alert("No XLSX files selected for the current status.");
@@ -305,6 +287,8 @@ const confirmDelete = () => {
   if (selectedDocuments.value.length > 0) {
     documentsToDelete.value = [...selectedDocuments.value]; // Store selected IDs
     showDeleteConfirmation.value = true;
+  } else {
+    alert("Please select at least one document to delete.");
   }
 };
 
@@ -314,22 +298,37 @@ const closeDeletePopup = () => {
 };
 
 // Perform deletion and close popup
-const deleteSelectedDocuments = () => {
+const deleteSelectedDocuments = async () => {
   if (selectedDocuments.value.length === 0) {
     alert("No documents selected for deletion.");
     return;
   }
 
-  // Keep only documents that are NOT selected
-  documents.value = documents.value.filter(
-    (doc) => !documentsToDelete.value.includes(doc.id)
-  );
-  selectedDocuments.value = [];
-  showDeleteConfirmation.value = false;
+  try {
+    // Delete each selected document from PocketBase
+    const deletePromises = documentsToDelete.value.map((id) =>
+      pb.collection("Collection_1").delete(id)
+    );
+
+    await Promise.all(deletePromises);
+
+    // Update local state after successful deletion
+    documents.value = documents.value.filter(
+      (doc) => !documentsToDelete.value.includes(doc.id)
+    );
+    selectedDocuments.value = [];
+    showDeleteConfirmation.value = false;
+
+    console.log("Successfully deleted documents:", documentsToDelete.value);
+  } catch (error) {
+    console.error("Error deleting documents:", error);
+    alert("Failed to delete documents. Please try again.");
+  }
 };
 
 //Checkbox Change Icon Function
-const handleCheckboxChange = (id: string) => { // Changed parameter type
+const handleCheckboxChange = (id: string) => {
+  // Changed parameter type
   toggleSelection(id);
   toggleOverlaySelection(id);
 };
@@ -374,7 +373,7 @@ const statusCounts = computed(() => {
 </script>
 
 <template>
-  <body class="bg-[#0A0E1A] flex h-screen p-4 max-h-[683px]">
+  <body class="bg-[#0A0E1A] flex flex-grow p-4">
     <!-- Add PO Document Button -->
     <div class="w-64 bg-[#0A0E1A] text-white mr-4 rounded-lg">
       <button
@@ -417,22 +416,22 @@ const statusCounts = computed(() => {
         class="w-full p-2 border rounded-md mb-4 text-black"
       />
 
-      <div class="flex justify-end gap-2">
-        <button
-          @click="closeModalAdd"
-          class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400 transition"
-        >
-          Cancel
-        </button>
-        <button
-          @click="submitPO"
-          class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
-        >
-          Create Order
-        </button>
+          <div class="flex justify-end gap-2">
+            <button
+              @click="closeModalAdd"
+              class="px-4 py-2 bg-red-600 rounded-md hover:bg-red-700 transition"
+            >
+              Cancel
+            </button>
+            <button
+              @click="submitPO"
+              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
+            >
+              Create Order
+            </button>
+          </div>
+        </div>
       </div>
-    </div>
-  </div>
 
       <!--Sidebar Buttons-->
 
@@ -440,7 +439,7 @@ const statusCounts = computed(() => {
         <!-- Documents (All) -->
         <div
           @click="setActive('Documents')"
-          class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer"
+          class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
           :class="
             activeButton === 'Documents'
               ? 'bg-[#2E3347] text-purple-400'
@@ -450,10 +449,11 @@ const statusCounts = computed(() => {
           <span class="flex items-center gap-2"><File /> Documents </span>
           <span class="text-white">{{ documents.length }}</span>
         </div>
+
         <!-- Completed -->
         <div
           @click="setActive('Completed')"
-          class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer font-semibold"
+          class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer font-semibold transition-all duration-300 ease-in-out hover:translate-x-2"
           :class="
             activeButton === 'Completed'
               ? 'bg-[#2E3347] text-green-400'
@@ -467,7 +467,7 @@ const statusCounts = computed(() => {
         <!-- Pending -->
         <div
           @click="setActive('Pending')"
-          class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer"
+          class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
           :class="
             activeButton === 'Pending'
               ? 'bg-[#2E3347] text-purple-400'
@@ -481,7 +481,7 @@ const statusCounts = computed(() => {
         <!-- Lapsed -->
         <div
           @click="setActive('Lapsed')"
-          class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer"
+          class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
           :class="
             activeButton === 'Lapsed'
               ? 'bg-[#2E3347] text-yellow-400'
@@ -495,7 +495,7 @@ const statusCounts = computed(() => {
         <!-- Needs Action -->
         <div
           @click="setActive('Needs Action')"
-          class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer"
+          class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
           :class="
             activeButton === 'Needs Action'
               ? 'bg-[#2E3347] text-red-500'
@@ -524,13 +524,13 @@ const statusCounts = computed(() => {
       <!-- Action Buttons with Lucide Icons -->
       <div class="flex space-x-4 mb-4">
         <button
-          class="p-2 bg-gray-100 rounded hover:bg-gray-300 transition"
+          class="p-2 bg-gray-100 rounded hover:bg-green-500 transition"
           @click="downloadSelectedDocuments"
         >
           <Download />
         </button>
         <button
-          class="p-2 bg-gray-100 rounded hover:bg-gray-300 transition"
+          class="p-2 bg-gray-100 rounded hover:bg-red-500 transition"
           @click="confirmDelete"
         >
           <Trash />
@@ -603,7 +603,6 @@ const statusCounts = computed(() => {
         </table>
       </div>
     </div>
-
 
     <!-- Overlay -->
     <div
@@ -709,8 +708,4 @@ const statusCounts = computed(() => {
   </body>
 </template>
 
-<style scoped>
-/* body {
-  overflow: hidden;
-} */
-</style>
+<style scoped></style>
