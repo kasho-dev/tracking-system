@@ -33,6 +33,7 @@ interface Document {
   createdBy: string;
   dateCreated: string;
   status: string;
+  fileType?: string; // ✅ Add this to allow undefined values
 }
 
 // Search Query
@@ -92,7 +93,12 @@ const activeButton = ref("Documents"); // Default active button
 
 const setActive = (status: string) => {
   activeButton.value = status;
+
+    // Ensure "Documents" triggers download function
+
 };
+
+
 
 /// MODAL 2
 // Modal state
@@ -121,6 +127,8 @@ const documents = ref<Document[]>([
     createdBy: "Maria Santos",
     dateCreated: "March 10, 2025, 08:45:00 AM",
     status: "Completed",
+    fileType: "xlsx"
+
   },
   {
     id: "2",
@@ -130,6 +138,7 @@ const documents = ref<Document[]>([
     createdBy: "Juan Dela Cruz",
     dateCreated: "March 11, 2025, 02:30:15 PM",
     status: "Pending",
+    fileType: "xlsx"
   },
   {
     id: "3",
@@ -139,6 +148,7 @@ const documents = ref<Document[]>([
     createdBy: "Olivia Brown",
     dateCreated: "March 12, 2025, 11:15:45 AM",
     status: "Needs Action",
+    fileType: "xlsx"
   },
   {
     id: "4",
@@ -148,6 +158,7 @@ const documents = ref<Document[]>([
     createdBy: "Mia Martinez",
     dateCreated: "March 13, 2025, 06:50:30 PM",
     status: "Lapsed",
+    fileType: "xlsx"
   },
   {
     id: "5",
@@ -157,6 +168,7 @@ const documents = ref<Document[]>([
     createdBy: "Emma Wilson",
     dateCreated: "March 14, 2025, 07:20:10 AM",
     status: "Completed",
+    fileType: "xlsx"
   },
   
 ]);
@@ -213,16 +225,18 @@ const toggleOverlaySelection = (id: string) => { // Changed parameter type
 };
 
 const downloadSelectedDocuments = () => {
-  if (selectedDocuments.value.length === 0) return; // No selection, do nothing
-
+  // Filter selected documents that match the active status and are XLSX files
   const selectedDocs = selectedDocuments.value
-    .map((id) => documents.value.find((d) => d.id === id))
-    .filter((doc): doc is Document => !!doc); // Ensures only valid documents are included
+    .map((id) => documents.value.find((doc) => doc.id === id))
+    .filter((doc): doc is Document => !!doc && (activeButton.value === "Documents" || doc.status === activeButton.value) && doc.fileType === "xlsx");
 
-  if (selectedDocs.length === 0) return; // Prevent errors if no valid documents are found
+  if (selectedDocs.length === 0) {
+    alert("No XLSX files selected for the current status.");
+    return;
+  }
 
   if (selectedDocs.length === 1) {
-    // Single order selected - Name file based on Processing Order #
+    // Single document selected - Name file based on Order Number
     const doc = selectedDocs[0];
     const fileName = `${doc.orderNumber}.xlsx`;
 
@@ -241,7 +255,7 @@ const downloadSelectedDocuments = () => {
     XLSX.utils.book_append_sheet(workbook, worksheet, "Order Details");
     XLSX.writeFile(workbook, fileName);
   } else {
-    // Multiple orders selected - Name file as "Multiple Orders.xlsx"
+    // Multiple documents selected - Name file as "Multiple Orders.xlsx"
     const data = selectedDocs.map((doc) => ({
       "Order Number": doc.orderNumber,
       "Tracking ID": doc.trackingId,
@@ -276,6 +290,12 @@ const closeDeletePopup = () => {
 
 // Perform deletion and close popup
 const deleteSelectedDocuments = () => {
+  if (selectedDocuments.value.length === 0) {
+    alert("No documents selected for deletion.");
+    return;
+  }
+
+  // Keep only documents that are NOT selected
   documents.value = documents.value.filter(
     (doc) => !documentsToDelete.value.includes(doc.id)
   );
