@@ -7,6 +7,10 @@ import { ref, computed, watch } from "vue";
 import { useSearchStore } from "/workspaces/tracking-system/src/stores/searchStore.ts"; // Import the Pinia store
 import * as XLSX from "xlsx";
 
+import PocketBase from 'pocketbase';
+const pb = new PocketBase('http://127.0.0.1:8090');
+
+
 const searchStore = useSearchStore(); // ✅ Initialize store
 
 import {
@@ -22,7 +26,7 @@ import {
 
 // Define the type for documents
 interface Document {
-  id: number;
+  id: string; // Changed from number to string
   orderNumber: string;
   trackingId: string;
   handledBy: string;
@@ -48,9 +52,40 @@ const closeModalAdd = () => {
   poNumber.value = ""; // Reset input field when closed
 };
 
-const submitPO = () => {
-  console.log("Submitted PO Number:", poNumber.value);
-  closeModalAdd();
+const submitPO = async () => {
+  if (!poNumber.value) {
+    alert("Please enter an order number.");
+    return;
+  }
+
+  const data = {
+    Order_No: poNumber.value, // Use the PO number entered by the user
+    trackingId: `seq${Math.floor(Math.random() * 1000000)}`, // Generate a random tracking ID
+    handledBy: "System", // Default handler
+    createdBy: "Admin", // Default creator
+    status: "Pending", // Default status
+  };
+
+  try {
+    // Save the new order to PocketBase
+    const record = await pb.collection('Collection_1').create(data);
+
+    // Add the new order to the documents array
+    documents.value.push({
+      id: record.id, // Use PocketBase record ID
+      orderNumber: `Processing Order #${record.Order_No}`, // Map Order_No to orderNumber
+      trackingId: record.trackingId,
+      handledBy: record.handledBy,
+      createdBy: record.createdBy,
+      dateCreated: new Date(record.created).toLocaleString(), // Format the creation date
+      status: record.status,
+    });
+
+    closeModalAdd();
+  } catch (error) {
+    console.error("Error creating record:", error);
+    alert("Failed to create the order. Please try again.");
+  }
 };
 
 const activeButton = ref("Documents"); // Default active button
@@ -79,7 +114,7 @@ const closeModal = () => {
 //Documents Data
 const documents = ref<Document[]>([
   {
-    id: 1,
+    id: "1",
     orderNumber: "Processing Order #1",
     trackingId: "983472983742983",
     handledBy: "Juan Dela Cruz",
@@ -88,7 +123,7 @@ const documents = ref<Document[]>([
     status: "Completed",
   },
   {
-    id: 2,
+    id: "2",
     orderNumber: "Processing Order #2",
     trackingId: "349857293847593",
     handledBy: "Coco Hardin",
@@ -97,7 +132,7 @@ const documents = ref<Document[]>([
     status: "Pending",
   },
   {
-    id: 3,
+    id: "3",
     orderNumber: "Processing Order #3",
     trackingId: "234978234789234",
     handledBy: "Liam Johnson",
@@ -106,7 +141,7 @@ const documents = ref<Document[]>([
     status: "Needs Action",
   },
   {
-    id: 4,
+    id: "4",
     orderNumber: "Processing Order #4",
     trackingId: "987238947238947",
     handledBy: "Sophia Garcia",
@@ -115,7 +150,7 @@ const documents = ref<Document[]>([
     status: "Lapsed",
   },
   {
-    id: 5,
+    id: "5",
     orderNumber: "Processing Order #5",
     trackingId: "238947923847928",
     handledBy: "Noah Smith",
@@ -123,69 +158,24 @@ const documents = ref<Document[]>([
     dateCreated: "March 14, 2025, 07:20:10 AM",
     status: "Completed",
   },
-  {
-    id: 6,
-    orderNumber: "Processing Order #6",
-    trackingId: "874923847238492",
-    handledBy: "Ava Thomas",
-    createdBy: "Lucas White",
-    dateCreated: "March 15, 2025, 04:10:22 PM",
-    status: "Pending",
-  },
-  {
-    id: 7,
-    orderNumber: "Processing Order #7",
-    trackingId: "349823748923749",
-    handledBy: "James Davis",
-    createdBy: "Charlotte Lee",
-    dateCreated: "March 16, 2025, 09:05:33 AM",
-    status: "Lapsed",
-  },
-  {
-    id: 8,
-    orderNumber: "Processing Order #8",
-    trackingId: "923847238947238",
-    handledBy: "Ella Harris",
-    createdBy: "Henry Walker",
-    dateCreated: "March 17, 2025, 03:45:18 PM",
-    status: "Needs Action",
-  },
-  {
-    id: 9,
-    orderNumber: "Processing Order #9",
-    trackingId: "394872384798234",
-    handledBy: "William Lewis",
-    createdBy: "Sophia Robinson",
-    dateCreated: "March 18, 2025, 12:30:00 PM",
-    status: "Lapsed",
-  },
-  {
-    id: 10,
-    orderNumber: "Processing Order #10",
-    trackingId: "128374982374982",
-    handledBy: "Benjamin Carter",
-    createdBy: "Lucas Hall",
-    dateCreated: "March 19, 2025, 10:10:45 AM",
-    status: "Lapsed",
-  },
+  
 ]);
 
 //Checkbox Function
 const selectAll = ref(false);
-const selectedDocuments = ref<number[]>([]);
+const selectedDocuments = ref<string[]>([]);
 
 // Check if all checkboxes are selected
 const areAllSelected = computed(() => 
   selectedDocuments.value.length === documents.value.length
 );
 
-
-const toggleSelection = (id: number) => {
+const toggleSelection = (id: string) => { // Changed parameter type
   const index = selectedDocuments.value.indexOf(id);
   if (index > -1) {
-    selectedDocuments.value.splice(index, 1); // Uncheck if already selected
+    selectedDocuments.value.splice(index, 1);
   } else {
-    selectedDocuments.value.push(id); // Add to selected if not already checked
+    selectedDocuments.value.push(id);
   }
 };
 
@@ -194,17 +184,15 @@ const deleteSelected = () => {
   documents.value = documents.value.filter(
     (doc) => !selectedDocuments.value.includes(doc.id)
   );
-  selectedDocuments.value = []; // Clear selection after deletion
+  selectedDocuments.value = [];
 };
 
 const toggleAllSelection = () => {
-  const shouldSelectAll = !areAllSelected.value; // Toggle based on current state
-
+  const shouldSelectAll = !areAllSelected.value;
   selectedDocuments.value = shouldSelectAll
-    ? documents.value.map((doc) => doc.id) // Select all
-    : []; // Deselect all
-
-  selectAll.value = shouldSelectAll; // Keep selectAll state updated
+    ? documents.value.map((doc) => doc.id)
+    : [];
+  selectAll.value = shouldSelectAll;
 };
 
 // Watch for individual checkbox changes and update "Select All" state
@@ -213,14 +201,14 @@ watch(selectedDocuments, (newVal) => {
 });
 
 //Download Function
-const selectedOverlayDocuments = ref<number[]>([]);
+const selectedOverlayDocuments = ref<string[]>([]);
 
-const toggleOverlaySelection = (id: number) => {
+const toggleOverlaySelection = (id: string) => { // Changed parameter type
   const index = selectedOverlayDocuments.value.indexOf(id);
   if (index > -1) {
-    selectedOverlayDocuments.value.splice(index, 1); // Uncheck if already selected
+    selectedOverlayDocuments.value.splice(index, 1);
   } else {
-    selectedOverlayDocuments.value.push(id); // Add to selected if not already checked
+    selectedOverlayDocuments.value.push(id);
   }
 };
 
@@ -271,7 +259,7 @@ const downloadSelectedDocuments = () => {
 
 //Confirm Delete Function
 const showDeleteConfirmation = ref(false); // Controls popup visibility
-const documentsToDelete = ref<number[]>([]); // Stores selected document IDs
+const documentsToDelete = ref<string[]>([]);
 
 // Open confirmation overlay
 const confirmDelete = () => {
@@ -291,14 +279,14 @@ const deleteSelectedDocuments = () => {
   documents.value = documents.value.filter(
     (doc) => !documentsToDelete.value.includes(doc.id)
   );
-  selectedDocuments.value = []; // Clear selection after deleting
+  selectedDocuments.value = [];
   showDeleteConfirmation.value = false;
 };
 
 //Checkbox Change Icon Function
-const handleCheckboxChange = (id: number) => {
-  toggleSelection(id); // Handles selection for delete function
-  toggleOverlaySelection(id); // Handles selection for download function
+const handleCheckboxChange = (id: string) => { // Changed parameter type
+  toggleSelection(id);
+  toggleOverlaySelection(id);
 };
 
 // Computed property to filter documents
@@ -345,61 +333,61 @@ const statusCounts = computed(() => {
     <!-- Add PO Document Button -->
     <div class="w-64 bg-[#0A0E1A] text-white mr-4 rounded-lg">
       <button
-        @click="openModalAdd"
-        class="w-full flex items-center justify-center gap-2 bg-[#6A5CFE] text-white text-sm font-semibold py-3 rounded-xl hover:bg-[#7C6CFF] transition"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
+    @click="openModalAdd"
+    class="w-full flex items-center justify-center gap-2 bg-[#6A5CFE] text-white text-sm font-semibold py-3 rounded-xl hover:bg-[#7C6CFF] transition"
+  >
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
+      <path d="M13.234 20.252 21 12.3" />
+      <path
+        d="m16 6-8.414 8.586a2 2 0 0 0 0 2.828 2 2 0 0 0 2.828 0l8.414-8.586a4 4 0 0 0 0-5.656 4 4 0 0 0-5.656 0l-8.415 8.585a6 6 0 1 0 8.486 8.486"
+      />
+    </svg>
+    Add Processing Order
+  </button>
+
+  <!-- Processing Order Creation Modal -->
+  <div
+    v-if="showModal"
+    class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center"
+  >
+    <div class="bg-[#0B132B] p-6 rounded-lg shadow-md w-96">
+      <h2 class="text-lg font-semibold mb-4 text-white text-center">
+        Enter Order Number
+      </h2>
+
+      <input
+        v-model="poNumber"
+        type="text"
+        placeholder="eg. Processing Order #"
+        class="w-full p-2 border rounded-md mb-4 text-black"
+      />
+
+      <div class="flex justify-end gap-2">
+        <button
+          @click="closeModalAdd"
+          class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400 transition"
         >
-          <path d="M13.234 20.252 21 12.3" />
-          <path
-            d="m16 6-8.414 8.586a2 2 0 0 0 0 2.828 2 2 0 0 0 2.828 0l8.414-8.586a4 4 0 0 0 0-5.656 4 4 0 0 0-5.656 0l-8.415 8.585a6 6 0 1 0 8.486 8.486"
-          />
-        </svg>
-        Add Processing Order
-      </button>
-
-      <!-- PO Document Creation Modal -->
-      <div
-        v-if="showModal"
-        class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center"
-      >
-        <div class="bg-[#0B132B] p-6 rounded-lg shadow-md w-96">
-          <h2 class="text-lg font-semibold mb-4 text-white text-center">
-            Enter PO File Name
-          </h2>
-
-          <input
-            v-model="poNumber"
-            type="text"
-            placeholder="eg. Processing Order #"
-            class="w-full p-2 border rounded-md mb-4 text-black"
-          />
-
-          <div class="flex justify-end gap-2">
-            <button
-              @click="closeModalAdd"
-              class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400 transition"
-            >
-              Cancel
-            </button>
-            <button
-              @click="submitPO"
-              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
-            >
-              Create Order
-            </button>
-          </div>
-        </div>
+          Cancel
+        </button>
+        <button
+          @click="submitPO"
+          class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
+        >
+          Create Order
+        </button>
       </div>
+    </div>
+  </div>
 
       <!--Sidebar Buttons-->
 
