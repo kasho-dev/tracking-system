@@ -2,6 +2,8 @@
 // import {useDark} from "@vueuse/core";
 import { useSearchStore } from "/workspaces/tracking-system/src/stores/searchStore.ts";
 import { Toolbar } from "primevue";
+import PocketBase from 'pocketbase';
+const pb = new PocketBase('http://127.0.0.1:8090');
 
 // import { Button} from "primevue";
 // import { RouterLink } from "vue-router";

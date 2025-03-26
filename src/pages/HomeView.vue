@@ -95,7 +95,7 @@ const fetchDocuments = async () => {
     // Map the records to the Document interface format
     documents.value = records.map((record) => ({
       id: record.id,
-      orderNumber: `Processing Order #${record.Order_No}`,
+      orderNumber: `${record.Order_No}`,
       trackingId: record.trackingId,
       handledBy: record.handledBy,
       createdBy: record.createdBy,
