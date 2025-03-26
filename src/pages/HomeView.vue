@@ -9,44 +9,27 @@ import * as XLSX from "xlsx";
 import Timeline from 'primevue/timeline';
 import PocketBase from 'pocketbase';
 
-const getStatusIcon = (status) => {
-  switch(status.toLowerCase()) {
-    case 'pending': return Check;
-    case 'in progress': return Clock;
-    case 'completed': return Check;
-    default: return Check;
-  }
-};
+const events = computed(() => {
+  if (!selectedOrder.value) return [];
+  
+  return [
+    {
+      title: "Document Created",
+      description: "Document created",
+      time: selectedOrder.value.dateCreated
+    },
+    {
+      title: "Document checked by supplier",
+      description: "In progress"
+    },
+    {
+      title: "The Document is being verified",
+      description: "Pending"
+    }
+  ];
+});
 
-const getStatusColor = (status) => {
-  switch(status.toLowerCase()) {
-    case 'pending': return 'text-green-400';
-    case 'in progress': return 'text-yellow-400';
-    case 'completed': return 'text-green-400';
-    default: return 'text-gray-400';
-  }
-};
 
-const events = ref([
-  {
-    status: 'Pending',
-    title: 'The Document is being verified',
-    description: 'Pending',
-    actor: ''
-  },
-  {
-    status: 'In Progress',
-    title: 'Document checked by supplier',
-    description: 'In progress',
-    actor: ''
-  },
-  {
-    status: 'Completed',
-    title: 'Document was received',
-    description: 'Document was received by supplier',
-    actor: 'John Doe'
-  }
-]);
 
 const pb = new PocketBase('http://127.0.0.1:8090');
 
@@ -170,7 +153,7 @@ const submitPO = async () => {
     
     documents.value.push({
       id: record.id,
-      orderNumber: `Purchasing Order #${record.Order_No}`,
+      orderNumber: `${record.Order_No}`,
       trackingId: record.trackingId,
       handledBy: record.handledBy,
       createdBy: record.createdBy, // Will show "tassadar"
@@ -663,20 +646,19 @@ const statusCounts = computed(() => {
         <h2 class="text-lg font-bold">{{ selectedOrder?.orderNumber }}</h2>
         <p class="text-sm text-gray-400">Order Details</p>
 
-        <!-- Order Details -->
-        <div class="mt-4 text-sm">
-          <div class="flex justify-between">
-            <span class="text-gray-400">Created at</span>
-            <span>{{ selectedOrder?.dateCreated }}</span>
-          </div>
-          <div class="flex justify-between mt-2">
-            <span class="text-gray-400">Status</span>
-            <span
-              class="px-2 py-1 bg-yellow-500 text-black text-xs font-semibold rounded"
-              >In progress</span
-            >
-          </div>
-        </div>
+     <!-- Order Details -->
+<div class="mt-4 text-sm">
+  <div class="flex justify-between">
+    <span class="text-gray-400">Created on</span>
+    <span>{{ selectedOrder?.dateCreated }}</span>
+  </div>
+  <div class="flex justify-between mt-2">
+    <span class="text-gray-400">Status</span>
+    <span class="px-2 py-1 bg-yellow-500 text-black text-xs font-semibold rounded">
+      {{ selectedOrder?.status || 'In progress' }}
+    </span>
+  </div>
+</div>
 
         <!-- Handler Info -->
         <div class="mt-6">
@@ -685,24 +667,14 @@ const statusCounts = computed(() => {
           <p class="text-sm text-blue-400 underline">juandelacruz@gmail.com</p>
           <p class="text-sm">09384874855</p>
         </div>
-
-        <!-- Timeline -->
-<Timeline :value="events" class="mt-6"align="right" >
+<!-- Timeline -->
+<Timeline :value="events" align="left" class="left-timeline">
   <template #content="slotProps">
-    <div class="flex items-start gap-2">
-      <component 
-        :is="getStatusIcon(slotProps.item.status)" 
-        :class="getStatusColor(slotProps.item.status)"
-        class="w-4 h-4 mt-1 flex-shrink-0"
-      />
-      <div>
-        <strong>{{ slotProps.item.title }}</strong>
-        <p class="text-gray-400">
-          {{ slotProps.item.description }}
-          <span v-if="slotProps.item.actor" class="text-blue-400">
-            {{ slotProps.item.actor }}
-          </span>
-        </p>
+    <div class="timeline-item">
+      <div class="timeline-title">{{ slotProps.item.title }}</div>
+      <div class="timeline-description">{{ slotProps.item.description }}</div>
+      <div v-if="slotProps.item.time" class="timeline-time">
+        {{ slotProps.item.time }}
       </div>
     </div>
   </template>
@@ -712,8 +684,7 @@ const statusCounts = computed(() => {
 
     <!-- Delete Confirmation Popup -->
     <div
-      v-if="showDeleteConfirmation"
-      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      v-if="showDeleteConfirmation"class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
     >
       <div class="bg-white p-6 rounded-lg shadow-lg w-96">
         <h2 class="text-lg font-semibold mb-4">Confirm Deletion</h2>
@@ -741,4 +712,63 @@ const statusCounts = computed(() => {
   </body>
 </template>
 
-<style scoped></style>
+<style scoped>
+.left-timeline {
+  margin-top: 20px; /* Adjust this value to control how much it shifts down */
+  padding-top: 0;  
+  margin-left: 0;
+  padding-left: 0;
+}
+
+.left-timeline .p-timeline-event {
+  padding: 0;
+  margin: 0 0 1rem 0;
+}
+
+.left-timeline .p-timeline-event-opposite {
+  display: none !important;
+  width: 0 !important;
+}
+
+.left-timeline .p-timeline-event-content {
+  padding-left: 2 !important;
+  margin-left: 2 !important;
+}
+
+.timeline-item {
+  text-align: left;
+  margin-left: 0;
+}
+
+
+.timeline-title {
+  font-weight: bold;
+  margin-bottom: 0.25rem;
+}
+
+.timeline-description {
+  color: #999;
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+
+
+.timeline-actor {
+  color: #2196F3;
+}
+
+.timeline-time {
+  color: #999;
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+:deep(.left-timeline .p-timeline-event-opposite) {
+  display: none !important;
+  width: 0 !important;
+}
+:deep(.left-timeline .p-timeline-event-content) {
+  padding-left: 2 !important;
+  margin-left: 2 !important;
+}
+</style>
