@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+  <div class="min-h-screen bg-[#0A0E1A] flex items-center justify-center p-4">
     <div class="bg-white rounded-lg shadow-md w-full max-w-md p-8">
       <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">Welcome</h1>
       

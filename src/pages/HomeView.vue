@@ -6,8 +6,48 @@
 import { onMounted, ref, computed, watch } from "vue";
 import { useSearchStore } from "/workspaces/tracking-system/src/stores/searchStore.ts"; // Import the Pinia store
 import * as XLSX from "xlsx";
-
+import Timeline from 'primevue/timeline';
 import PocketBase from 'pocketbase';
+
+const getStatusIcon = (status) => {
+  switch(status.toLowerCase()) {
+    case 'pending': return Check;
+    case 'in progress': return Clock;
+    case 'completed': return Check;
+    default: return Check;
+  }
+};
+
+const getStatusColor = (status) => {
+  switch(status.toLowerCase()) {
+    case 'pending': return 'text-green-400';
+    case 'in progress': return 'text-yellow-400';
+    case 'completed': return 'text-green-400';
+    default: return 'text-gray-400';
+  }
+};
+
+const events = ref([
+  {
+    status: 'Pending',
+    title: 'The Document is being verified',
+    description: 'Pending',
+    actor: ''
+  },
+  {
+    status: 'In Progress',
+    title: 'Document checked by supplier',
+    description: 'In progress',
+    actor: ''
+  },
+  {
+    status: 'Completed',
+    title: 'Document was received',
+    description: 'Document was received by supplier',
+    actor: 'John Doe'
+  }
+]);
+
 const pb = new PocketBase('http://127.0.0.1:8090');
 
 
@@ -647,35 +687,26 @@ const statusCounts = computed(() => {
         </div>
 
         <!-- Timeline -->
-        <div class="mt-6">
-          <h3 class="font-semibold">Timeline</h3>
-          <ul class="mt-2 space-y-2 text-sm">
-            <li class="flex items-start gap-2">
-              <Check class="text-green-400" />
-              <span>
-                <strong>The Document is being verified</strong>
-                <p class="text-gray-400">Pending</p>
-              </span>
-            </li>
-            <li class="flex items-start gap-2">
-              <Clock class="text-yellow-400" />
-              <span>
-                <strong>Document checked by supplier</strong>
-                <p class="text-gray-400">In progress</p>
-              </span>
-            </li>
-            <li class="flex items-start gap-2">
-              <Check class="text-green-400" />
-              <span>
-                <strong>Document was received</strong>
-                <p class="text-gray-400">
-                  Document was received by supplier
-                  <span class="text-blue-400">John Doe</span>
-                </p>
-              </span>
-            </li>
-          </ul>
-        </div>
+<Timeline :value="events" class="mt-6"align="right" >
+  <template #content="slotProps">
+    <div class="flex items-start gap-2">
+      <component 
+        :is="getStatusIcon(slotProps.item.status)" 
+        :class="getStatusColor(slotProps.item.status)"
+        class="w-4 h-4 mt-1 flex-shrink-0"
+      />
+      <div>
+        <strong>{{ slotProps.item.title }}</strong>
+        <p class="text-gray-400">
+          {{ slotProps.item.description }}
+          <span v-if="slotProps.item.actor" class="text-blue-400">
+            {{ slotProps.item.actor }}
+          </span>
+        </p>
+      </div>
+    </div>
+  </template>
+</Timeline>
       </div>
     </div>
 
