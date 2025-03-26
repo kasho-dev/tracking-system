@@ -1,8 +1,16 @@
-// router.ts
-import { createRouter, createWebHistory } from 'vue-router';
-import PocketBase from 'pocketbase'; // Add this import
-import HomeView from './pages/HomeView.vue';
-import Login from './pages/Login.vue';
+import { createWebHistory, createRouter } from "vue-router";
+
+import HomeViewView from "./pages/HomeView.vue";
+import CounterViewView from "./pages/CounterView.vue";
+import LoginView from "./pages/LoginView.vue"
+
+
+const routes = [
+    { path: "/", component: HomeViewView },
+    { path: "/counter", component: CounterViewView },
+    { path: '/login', component: LoginView 
+      }
+];
 
 const router = createRouter({
   history: createWebHistory(),
