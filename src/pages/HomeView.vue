@@ -434,10 +434,46 @@ const statusCounts = computed(() => {
         Enter PO Number
       </h2>
 
+      <h3>Work Order #</h3>
       <input
         v-model="poNumber"
         type="text"
         placeholder="eg. APO2025-2024"
+        class="w-full p-2 border rounded-md mb-4 text-black"
+      />
+      <h3>Supplier Name</h3>
+      <input
+        v-model="supplierName"
+        type="text"
+        placeholder="John Doe"
+        class="w-full p-2 border rounded-md mb-4 text-black"
+      />
+      <h3>Address</h3>
+      <input
+        v-model="supplierAddress"
+        type="text"
+        placeholder="Legazpi City, Albay"
+        class="w-full p-2 border rounded-md mb-4 text-black"
+      />
+      <h3>TIN ID</h3>
+      <input
+        v-model="tin_id"
+        type="text"
+        placeholder="716-412-421 VAT"
+        class="w-full p-2 border rounded-md mb-4 text-black"
+      />
+      <h3>Mode of Procurement</h3>
+      <input
+        v-model="procurementMode"
+        type="text"
+        placeholder="Small Value Procurement"
+        class="w-full p-2 border rounded-md mb-4 text-black"
+      />
+      <h3>Delivery Date</h3>
+      <input
+        v-model="deliveryDate"
+        type="text"
+        placeholder="January 1, 2025"
         class="w-full p-2 border rounded-md mb-4 text-black"
       />
 
