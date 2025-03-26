@@ -64,7 +64,7 @@ const fetchTassadarUser = async () => {
 fetchTassadarUser();
 
 // Search Query
-const searchQuery = ref("");
+// const searchQuery = ref("");
 
 // Document data
 const showModal = ref(false);
@@ -122,6 +122,7 @@ const submitPO = async () => {
     handledBy: "System", // Default handler
     createdBy: "Admin", // Default creator
     status: "Pending", // Default status
+
   };
 
   try {
@@ -129,13 +130,14 @@ const submitPO = async () => {
     
     documents.value.push({
       id: record.id,
-      orderNumber: `${record.Order_No}`,
+      orderNumber: `Purchasing Order #${record.Order_No}`,
       trackingId: record.trackingId,
       handledBy: record.handledBy,
       createdBy: record.createdBy, // Will show "tassadar"
       dateCreated: new Date(record.created).toLocaleString(),
       status: record.status,
       fileType: "xlsx", // Add this line
+      
     });
 
     closeModalAdd();
@@ -193,12 +195,12 @@ const toggleSelection = (id: string) => {
 };
 
 //Delete Selected Checkbox Function
-const deleteSelected = () => {
-  documents.value = documents.value.filter(
-    (doc) => !selectedDocuments.value.includes(doc.id)
-  );
-  selectedDocuments.value = [];
-};
+// const deleteSelected = () => {
+//   documents.value = documents.value.filter(
+//     (doc) => !selectedDocuments.value.includes(doc.id)
+//   );
+//   selectedDocuments.value = [];
+// };
 
 const toggleAllSelection = () => {
   const shouldSelectAll = !areAllSelected.value;
