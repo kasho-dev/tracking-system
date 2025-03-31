@@ -12,7 +12,7 @@ import PocketBase from 'pocketbase';
 const events = computed(() => {
   if (!selectedOrder.value) return [];
   
-  return [
+  const baseEvents = [
     {
       title: "Document Created",
       description: "Document created",
@@ -27,8 +27,20 @@ const events = computed(() => {
       description: "Pending"
     }
   ];
+  
+  if (selectedOrder.value.status === "Completed") {
+    return [
+      ...baseEvents,
+      {
+        title: "Document Completed",
+        description: "All steps finished",
+        time: new Date().toLocaleString()
+      }
+    ];
+  }
+  
+  return baseEvents;
 });
-
 
 
 const pb = new PocketBase('http://127.0.0.1:8090');
@@ -395,6 +407,34 @@ const statusCounts = computed(() => {
     return acc;
   }, {} as Record<string, number>);
 });
+
+// For changing document status to "Completed"
+const markAsCompleted = async () => {
+  if (!selectedOrder.value) return;
+  
+  try {
+    // Update the document in PocketBase
+    await pb.collection('Collection_1').update(selectedOrder.value.id, {
+      status: "Completed"
+    });
+    
+    // Update the local state
+    const docIndex = documents.value.findIndex(doc => doc.id === selectedOrder.value?.id);
+    if (docIndex !== -1) {
+      documents.value[docIndex].status = "Completed";
+    }
+    
+    // Update the selectedOrder reference
+    selectedOrder.value.status = "Completed";
+    
+    // Optionally close the modal or show a success message
+    // closeModal();
+  } catch (error) {
+    console.error("Error updating document status:", error);
+    alert("Failed to update status. Please try again.");
+  }
+};
+
 </script>
 
 <template>
@@ -475,7 +515,7 @@ const statusCounts = computed(() => {
         type="text"
         placeholder="January 1, 2025"
         class="w-full p-2 border rounded-md mb-4 text-black"
-      />
+      /> 
 
           <div class="flex justify-end gap-2">
             <button
@@ -689,11 +729,19 @@ const statusCounts = computed(() => {
     <span>{{ selectedOrder?.dateCreated }}</span>
   </div>
   <div class="flex justify-between mt-2">
-    <span class="text-gray-400">Status</span>
-    <span class="px-2 py-1 bg-yellow-500 text-black text-xs font-semibold rounded">
-      {{ selectedOrder?.status || 'In progress' }}
-    </span>
-  </div>
+  <span class="text-gray-400">Status</span>
+  <span 
+    class="px-2 py-1 text-black text-xs font-semibold rounded"
+    :class="{
+      'bg-yellow-500': selectedOrder?.status === 'Pending',
+      'bg-green-400': selectedOrder?.status === 'Completed',
+      'bg-red-500': selectedOrder?.status === 'Needs Action',
+      'bg-gray-500': !selectedOrder?.status
+    }"
+  >
+    {{ selectedOrder?.status || 'In progress' }}
+  </span>
+</div>
 </div>
 
         <!-- Handler Info -->
@@ -715,7 +763,24 @@ const statusCounts = computed(() => {
     </div>
   </template>
 </Timeline>
-      </div>
+
+<template v-if="selectedOrder">
+  <button 
+    v-if="selectedOrder.status !== 'Completed'"
+    @click="markAsCompleted"
+    class="px-4 py-2 mt-4 bg-green-500 text-white font-medium rounded-lg 
+           transition-all duration-200 
+           hover:bg-green-600 hover:shadow-lg hover:shadow-green-500/50 
+           active:scale-95 active:shadow-green-500/75 active:bg-green-700"
+  >
+    Mark as Completed
+  </button>
+  <div v-else class="px-4 py-2 mt-4 bg-gray-200 text-gray-700 font-medium rounded-lg">
+    ✓ Already Completed
+  </div>
+</template>
+
+</div>
     </div>
 
     <!-- Delete Confirmation Popup -->
