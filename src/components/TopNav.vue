@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useSearchStore } from "/workspaces/tracking-system/src/stores/searchStore.ts";
+import { useSearchStore } from "../stores/searchStore";
 import { Toolbar } from "primevue";
 import PocketBase from 'pocketbase';
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue';

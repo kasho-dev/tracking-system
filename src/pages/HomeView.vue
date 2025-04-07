@@ -3,53 +3,11 @@
 // import Vue from "../assets/vue.svg";
 // import Button from "primevue/button";
 // import { defineStore } from "pinia";
-import { onMounted, ref, computed, watch } from "vue";
-import { useSearchStore } from "/workspaces/tracking-system/src/stores/searchStore.ts"; // Import the Pinia store
+import { onMounted, ref, computed, watch, onUnmounted } from "vue";
+import { useSearchStore } from "../stores/searchStore"; // Import the Pinia store
 import * as XLSX from "xlsx";
-import Timeline from 'primevue/timeline';
-import PocketBase from 'pocketbase';
-
-const events = computed(() => {
-  if (!selectedOrder.value) return [];
-  
-  const baseEvents = [
-    {
-      title: "Document Created",
-      description: "Document created",
-      time: selectedOrder.value.dateCreated
-    },
-    {
-      title: "Document checked by supplier",
-      description: "In progress"
-    },
-    {
-      title: "The Document is being verified",
-      description: "Pending"
-    }
-  ];
-  
-  if (selectedOrder.value.status === "Completed") {
-    return [
-      ...baseEvents,
-      {
-        title: "Document Completed",
-        description: "All steps finished",
-        time: new Date().toLocaleString()
-      }
-    ];
-  }
-  
-  return baseEvents;
-});
-
-
-const pb = new PocketBase('http://127.0.0.1:8090');
-
-
-
-
-const searchStore = useSearchStore(); // ✅ Initialize store
-
+import Timeline from "primevue/timeline";
+import PocketBase from "pocketbase";
 import {
   Check,
   Clock,
@@ -59,51 +17,267 @@ import {
   Download,
   Trash,
   X,
+  ChevronsUpDown,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-vue-next";
 
 // Define the type for documents
 interface Document {
-  id: string; // Changed from number to string
+  id: string;
   orderNumber: string;
   trackingId: string;
   handledBy: string;
   createdBy: string;
   dateCreated: string;
   status: string;
-  fileType?: string; // ✅ Add this to allow undefined values
+  fileType?: string;
+  supplierName: string;
+  address: string;
+  tin_ID: string;
+  modeofProcurement: string;
+  deliveryDate: string;
+  verifiedAt?: string;
+  completedAt?: string; // Add this
+  updatedAt?: string; // General last updated timestamp
 }
 
+// Linked Pocketbase
+const pb = new PocketBase("http://127.0.0.1:8090");
+
+const searchStore = useSearchStore(); // ✅ Initialize store
+
+// Refresh Table Every Second
+const refreshInterval = ref<ReturnType<typeof setInterval> | null>(null);
+const isOverlayOpen = ref(false);
+
+const fetchSelectedOrder = async () => {
+  if (!selectedOrder.value) return;
+  
+  try {
+    const record = await pb.collection("Collection_1").getOne(selectedOrder.value.id, {
+      expand: "verifiedAt,completedAt,updatedAt"
+    });
+    
+    selectedOrder.value = {
+      id: record.id,
+      orderNumber: `${record.Order_No}`,
+      trackingId: record.trackingId || "", // Ensure trackingId is included
+      handledBy: record.handledBy || "Unknown", // Default if missing
+      createdBy: record.createdBy || "Unknown", // Default if missing
+      dateCreated: new Date(record.created).toLocaleString(),
+      status: record.status || "Unknown", // Default if missing
+      fileType: record.fileType || "xlsx", // Default if missing
+      supplierName: record.supplierName || "Unknown", // Default if missing
+      address: record.address || "Unknown", // Default if missing
+      tin_ID: record.tin_ID || "Unknown", // Default if missing
+      modeofProcurement: record.modeofProcurement || "Unknown", // Default if missing
+      deliveryDate: record.deliveryDate 
+        ? new Date(record.deliveryDate).toLocaleDateString()
+        : "",
+      verifiedAt: record.verifiedAt,
+      completedAt: record.completedAt,
+      updatedAt: record.updatedAt
+    };
+  } catch (error) {
+    console.error("Error refreshing selected order:", error);
+  }
+};
+
+
+const startPolling = () => {
+  // Fetch documents immediately
+  fetchDocuments();
+
+  // If overlay is open, fetch selected order too
+  if (isOverlayOpen.value) {
+    fetchSelectedOrder();
+  }
+
+  // Set up interval for every second
+  refreshInterval.value = setInterval(() => {
+    fetchDocuments();
+    if (isOverlayOpen.value) {
+      fetchSelectedOrder();
+    }
+  }, 1000);
+};
+
+const stopPolling = () => {
+  if (refreshInterval.value) {
+    clearInterval(refreshInterval.value);
+    refreshInterval.value = null;
+  }
+};
+// End of Refresh Interval
+
+//Timeline Script
+const verificationTime = ref<string | null>(null);
+const timelineEvents = ref<
+  Array<{
+    title: string;
+    description: string;
+    time?: string;
+  }>
+>([]);
+
+const isAllowedRole = computed(() => {
+  const allowedRoles = ["admin", "user", "supplier"];
+  return (
+    currentUser.value?.role && allowedRoles.includes(currentUser.value.role)
+  );
+});
+
+const verifyDocument = async () => {
+  if (!selectedOrder.value) return;
+
+  try {
+    const verificationTimestamp = new Date().toISOString();
+
+    // Update in PocketBase with verification time
+    await pb.collection("Collection_1").update(selectedOrder.value.id, {
+      status: "Verified",
+      verifiedAt: verificationTimestamp,
+      updatedAt: verificationTimestamp
+    });
+
+    // Update local state
+    selectedOrder.value.status = "Verified";
+    selectedOrder.value.verifiedAt = verificationTimestamp;
+    selectedOrder.value.updatedAt = verificationTimestamp;
+
+    // Update in documents array
+    const docIndex = documents.value.findIndex(
+      (doc) => doc.id === selectedOrder.value?.id
+    );
+    if (docIndex !== -1) {
+      documents.value[docIndex].status = "Verified";
+      documents.value[docIndex].verifiedAt = verificationTimestamp;
+      documents.value[docIndex].updatedAt = verificationTimestamp;
+    }
+  } catch (error) {
+    console.error("Error verifying document:", error);
+    alert("Failed to verify document. Please try again.");
+  }
+};
+
+// Update your events computed property with proper type checking
+const events = computed(() => {
+  if (!selectedOrder.value) return [];
+
+  const baseEvents = [
+    {
+      title: "Document Created",
+      description: "Document created",
+      time: selectedOrder.value.dateCreated,
+    },
+  ];
+
+  // Show verification event if status is Verified
+  if (selectedOrder.value.status === "Verified" && selectedOrder.value.verifiedAt) {
+    baseEvents.push({
+      title: "Document Verified",
+      description: "Document has been verified",
+      time: formatTimestamp(selectedOrder.value.verifiedAt),
+    });
+  }
+
+  // Completion event - only show if completed
+  if (selectedOrder.value.status === "Completed" && selectedOrder.value.completedAt) {
+    baseEvents.push({
+      title: "Document Completed",
+      description: "All steps finished",
+      time: formatTimestamp(selectedOrder.value.completedAt),
+    });
+  }
+
+  return baseEvents;
+});
+
+// Helper function to consistently format timestamps
+const formatTimestamp = (timestamp: string) => {
+  return new Date(timestamp).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+};
+// End of Timeline Script
+
 // Store the user data
-const tassadarUser = ref<any>(null); 
+const tassadarUser = ref<any>(null);
 
 // Fetch the user by email or ID
 const fetchTassadarUser = async () => {
   try {
     // METHOD 1: Get by email (if you know it)
-    tassadarUser.value = await pb.collection('users').getFirstListItem(
-      'email="logangster86@gmail.com"'
-    );
-    
+    tassadarUser.value = await pb
+      .collection("users")
+      .getFirstListItem('email="logangster86@gmail.com"');
+
     // OR METHOD 2: Get by ID (from your screenshot)
     // tassadarUser.value = await pb.collection('users').getOne("Rigm2021984p");
-    
+
     console.log("Fetched user:", tassadarUser.value);
   } catch (error) {
     console.error("Error fetching user:", error);
     // Fallback to hardcoded name if fetch fails
-    tassadarUser.value = { name: "tassadar" }; 
+    tassadarUser.value = { name: "tassadar" };
   }
 };
 
 // Call this when your component mounts
 fetchTassadarUser();
 
-// Search Query
-// const searchQuery = ref("");
+// Sorting Table
+const sortField = ref("dateCreated");
+const sortDirection = ref("desc");
+
+const sortedDocuments = computed(() => {
+  const field = sortField.value;
+  const direction = sortDirection.value;
+
+  return [...filteredDocuments.value].sort((a, b) => {
+    // Handle date fields differently
+    if (field === "dateCreated") {
+      const dateA = new Date(a.dateCreated).getTime();
+      const dateB = new Date(b.dateCreated).getTime();
+      return direction === "asc" ? dateA - dateB : dateB - dateA;
+    }
+
+    // Handle string fields
+    const valueA = String(a[field as keyof Document]).toLowerCase();
+    const valueB = String(b[field as keyof Document]).toLowerCase();
+
+    if (valueA < valueB) return direction === "asc" ? -1 : 1;
+    if (valueA > valueB) return direction === "asc" ? 1 : -1;
+    return 0;
+  });
+});
+
+const toggleSort = (field: string) => {
+  if (sortField.value === field) {
+    // Reverse direction if same field is clicked
+    sortDirection.value = sortDirection.value === "asc" ? "desc" : "asc";
+  } else {
+    // Set new field and default to ascending
+    sortField.value = field;
+    sortDirection.value = "asc";
+  }
+};
+// End of sorting table
 
 // Document data
 const showModal = ref(false);
 const poNumber = ref("");
+const supplierName = ref("");
+const address = ref(""); // Changed from supplierAddress
+const tin_ID = ref(""); // Changed from tin_id
+const modeofProcurement = ref(""); // Changed from procurementMode
+const deliveryDate = ref("");
 
 // Add PO Document Modal
 const openModalAdd = () => {
@@ -113,21 +287,21 @@ const openModalAdd = () => {
 const closeModalAdd = () => {
   showModal.value = false;
   poNumber.value = ""; // Reset input field when closed
+  supplierName.value = ""; // Reset input field when closed
+  address.value = ""; // Reset input field when closed
+  tin_ID.value = ""; // Reset input field when closed
+  modeofProcurement.value = ""; // Reset input field when closed
+  deliveryDate.value = ""; // Reset input field when closed
 };
 
 // Code block for fetching data from PocketBase
-onMounted(() => {
-  fetchDocuments();
-});
-
 const fetchDocuments = async () => {
   try {
-    // Fetch all records from Collection_1
     const records = await pb.collection("Collection_1").getFullList({
-      sort: "-created", // Sort by creation date (newest first)
+      sort: "-created",
+      expand: "verifiedAt,completedAt,updatedAt", // Ensure these fields are included
     });
 
-    // Map the records to the Document interface format
     documents.value = records.map((record) => ({
       id: record.id,
       orderNumber: `${record.Order_No}`,
@@ -135,8 +309,17 @@ const fetchDocuments = async () => {
       handledBy: record.handledBy,
       createdBy: record.createdBy,
       dateCreated: new Date(record.created).toLocaleString(),
+      created: record.created,
       status: record.status,
-      fileType: "xlsx", // Assuming all documents are XLSX files
+      supplierName: record.supplierName,
+      address: record.address,
+      tin_ID: record.tin_ID,
+      modeofProcurement: record.modeofProcurement,
+      deliveryDate: record.deliveryDate,
+      verifiedAt: record.verifiedAt, // Store verification timestamp
+      completedAt: record.completedAt, // Store completion timestamp
+      updatedAt: record.updatedAt, // Store last updated timestamp
+      fileType: "xlsx",
     }));
   } catch (error) {
     console.error("Error fetching documents:", error);
@@ -151,28 +334,42 @@ const submitPO = async () => {
     return;
   }
 
-  const data = {
-    Order_No: poNumber.value, // Use the PO number entered by the user
-    trackingId: `seq${Math.floor(Math.random() * 1000000)}`, // Generate a random tracking ID
-    handledBy: "System", // Default handler
-    createdBy: "Admin", // Default creator
-    status: "Pending", // Default status
+  const formattedDeliveryDate = deliveryDate.value
+    ? new Date(deliveryDate.value).toISOString()
+    : "";
 
+  const data = {
+    Order_No: poNumber.value,
+    trackingId: `seq${Math.floor(Math.random() * 1000000)}`,
+    handledBy: "System",
+    createdBy: "Admin",
+    status: "Pending",
+    supplierName: supplierName.value,
+    address: address.value,
+    tin_ID: tin_ID.value,
+    modeofProcurement: modeofProcurement.value,
+    deliveryDate: formattedDeliveryDate, // Use the formatted date
   };
 
   try {
-    const record = await pb.collection('Collection_1').create(data);
-    
+    const record = await pb.collection("Collection_1").create(data);
+
     documents.value.push({
       id: record.id,
       orderNumber: `${record.Order_No}`,
       trackingId: record.trackingId,
       handledBy: record.handledBy,
-      createdBy: record.createdBy, // Will show "tassadar"
+      createdBy: record.createdBy,
       dateCreated: new Date(record.created).toLocaleString(),
       status: record.status,
-      fileType: "xlsx", // Add this line
-      
+      fileType: "xlsx",
+      supplierName: record.supplierName,
+      address: record.address,
+      tin_ID: record.tin_ID,
+      modeofProcurement: record.modeofProcurement,
+      deliveryDate: record.deliveryDate
+        ? new Date(record.deliveryDate).toLocaleDateString()
+        : "",
     });
 
     closeModalAdd();
@@ -196,13 +393,25 @@ const selectedOrder = ref<Document | null>(null);
 const isModalOpen = ref(false);
 
 // Open modal function
-const openModal = (order: Document) => {
-  selectedOrder.value = order;
+const openModal = async (order: Document) => {
+  isOverlayOpen.value = true;
+  selectedOrder.value = {
+    ...order,
+    deliveryDate: order.deliveryDate
+      ? new Date(order.deliveryDate).toLocaleDateString()
+      : "",
+    verifiedAt: order.verifiedAt, // Ensure this is passed
+    completedAt: order.completedAt, // Ensure this is passed
+  };
   isModalOpen.value = true;
+
+  if (!refreshInterval.value) {
+    startPolling();
+  }
 };
 
-// Close modal function
 const closeModal = () => {
+  isOverlayOpen.value = false;
   isModalOpen.value = false;
   selectedOrder.value = null;
 };
@@ -228,14 +437,6 @@ const toggleSelection = (id: string) => {
     selectedDocuments.value.push(id);
   }
 };
-
-//Delete Selected Checkbox Function
-// const deleteSelected = () => {
-//   documents.value = documents.value.filter(
-//     (doc) => !selectedDocuments.value.includes(doc.id)
-//   );
-//   selectedDocuments.value = [];
-// };
 
 const toggleAllSelection = () => {
   const shouldSelectAll = !areAllSelected.value;
@@ -291,6 +492,11 @@ const downloadSelectedDocuments = () => {
         "Handled By": doc.handledBy,
         "Created By": doc.createdBy,
         "Date Created": doc.dateCreated,
+        "Supplier Name": doc.supplierName,
+        "Supplier Address": doc.address,
+        "TIN ID": doc.tin_ID,
+        "Mode of Procurement": doc.modeofProcurement,
+        "Delivery Date": doc.deliveryDate,
       },
     ];
 
@@ -411,30 +617,71 @@ const statusCounts = computed(() => {
 // For changing document status to "Completed"
 const markAsCompleted = async () => {
   if (!selectedOrder.value) return;
-  
+
   try {
-    // Update the document in PocketBase
-    await pb.collection('Collection_1').update(selectedOrder.value.id, {
-      status: "Completed"
+    const completionTimestamp = new Date().toISOString();
+
+    // Update in PocketBase with completion time
+    await pb.collection("Collection_1").update(selectedOrder.value.id, {
+      status: "Completed",
+      completedAt: completionTimestamp,
+      updatedAt: completionTimestamp
     });
-    
-    // Update the local state
-    const docIndex = documents.value.findIndex(doc => doc.id === selectedOrder.value?.id);
+
+    // Update local state
+    selectedOrder.value.status = "Completed";
+    selectedOrder.value.completedAt = completionTimestamp;
+    selectedOrder.value.updatedAt = completionTimestamp;
+
+    // Update in documents array
+    const docIndex = documents.value.findIndex(
+      (doc) => doc.id === selectedOrder.value?.id
+    );
     if (docIndex !== -1) {
       documents.value[docIndex].status = "Completed";
+      documents.value[docIndex].completedAt = completionTimestamp;
+      documents.value[docIndex].updatedAt = completionTimestamp;
     }
-    
-    // Update the selectedOrder reference
-    selectedOrder.value.status = "Completed";
-    
-    // Optionally close the modal or show a success message
-    // closeModal();
   } catch (error) {
-    console.error("Error updating document status:", error);
-    alert("Failed to update status. Please try again.");
+    console.error("Error completing document:", error);
+    alert("Failed to complete document. Please try again.");
   }
 };
 
+// const for Admin only previews
+// Use this to hide admin features from non-admin users
+const currentUser = ref<any>(null);
+
+const isAdmin = computed(() => {
+  return currentUser.value?.role === "admin";
+});
+
+// Fetch current authenticated user from PocketBase
+const fetchCurrentUser = async () => {
+  try {
+    await pb.collection("users").authRefresh();
+    currentUser.value = pb.authStore.model;
+
+    // Ensure role exists, default to 'user' if not set
+    if (!currentUser.value?.role) {
+      currentUser.value = { ...currentUser.value, role: "user" };
+    }
+
+    console.log("Current user role:", currentUser.value?.role);
+  } catch (error) {
+    console.error("Error fetching current user:", error);
+    currentUser.value = null;
+  }
+};
+
+onMounted(() => {
+  fetchCurrentUser();
+  startPolling();
+});
+
+onUnmounted(() => {
+  stopPolling();
+});
 </script>
 
 <template>
@@ -442,100 +689,155 @@ const markAsCompleted = async () => {
     <!-- Add PO Document Button -->
     <div class="w-64 bg-[#0A0E1A] text-white mr-4 rounded-lg">
       <button
-    @click="openModalAdd"
-    class="w-full flex items-center justify-center gap-2 bg-[#6A5CFE] text-white text-sm font-semibold py-3 rounded-xl hover:bg-[#7C6CFF] active:bg-[#5A4BD9] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 ease-out"
-    >
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-    >
-      <path d="M13.234 20.252 21 12.3" />
-      <path
-        d="m16 6-8.414 8.586a2 2 0 0 0 0 2.828 2 2 0 0 0 2.828 0l8.414-8.586a4 4 0 0 0 0-5.656 4 4 0 0 0-5.656 0l-8.415 8.585a6 6 0 1 0 8.486 8.486"
-      />
-    </svg>
-    Add Purchasing Order
-  </button>
+        @click="openModalAdd"
+        class="w-full flex items-center justify-center gap-2 bg-[#6A5CFE] text-white text-sm font-semibold py-3 rounded-xl hover:bg-[#7C6CFF] active:bg-[#5A4BD9] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 ease-out"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="text-white"
+        >
+          <path d="M13.234 20.252 21 12.3" />
+          <path
+            d="m16 6-8.414 8.586a2 2 0 0 0 0 2.828 2 2 0 0 0 2.828 0l8.414-8.586a4 4 0 0 0 0-5.656 4 4 0 0 0-5.656 0l-8.415 8.585a6 6 0 1 0 8.486 8.486"
+          />
+        </svg>
+        Add Purchasing Order
+      </button>
 
-  <!-- Processing Order Creation Modal -->
-  <div
-    v-if="showModal"
-    class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center"
-  >
-    <div class="bg-[#0B132B] p-6 rounded-lg shadow-md w-96">
-      <h2 class="text-lg font-semibold mb-4 text-white text-center">
-        Enter PO Number
-      </h2>
-
-      <h3>Work Order #</h3>
-      <input
-        v-model="poNumber"
-        type="text"
-        placeholder="eg. APO2025-2024"
-        class="w-full p-2 border rounded-md mb-4 text-black"
-      />
-      <h3>Supplier Name</h3>
-      <input
-        v-model="supplierName"
-        type="text"
-        placeholder="John Doe"
-        class="w-full p-2 border rounded-md mb-4 text-black"
-      />
-      <h3>Address</h3>
-      <input
-        v-model="supplierAddress"
-        type="text"
-        placeholder="Legazpi City, Albay"
-        class="w-full p-2 border rounded-md mb-4 text-black"
-      />
-      <h3>TIN ID</h3>
-      <input
-        v-model="tin_id"
-        type="text"
-        placeholder="716-412-421 VAT"
-        class="w-full p-2 border rounded-md mb-4 text-black"
-      />
-      <h3>Mode of Procurement</h3>
-      <input
-        v-model="procurementMode"
-        type="text"
-        placeholder="Small Value Procurement"
-        class="w-full p-2 border rounded-md mb-4 text-black"
-      />
-      <h3>Delivery Date</h3>
-      <input
-        v-model="deliveryDate"
-        type="text"
-        placeholder="January 1, 2025"
-        class="w-full p-2 border rounded-md mb-4 text-black"
-      /> 
-
-          <div class="flex justify-end gap-2">
-            <button
-              @click="closeModalAdd"
-              class="px-4 py-2 bg-red-600 rounded-md hover:bg-red-700 transition"
+      <!-- Modal Transition -->
+      <Transition
+        enter-active-class="transition duration-300 ease-out"
+        enter-from-class="opacity-0"
+        enter-to-class="opacity-100"
+        leave-active-class="transition duration-200 ease-in"
+        leave-from-class="opacity-100"
+        leave-to-class="opacity-0"
+      >
+        <div
+          v-if="showModal"
+          class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50"
+          @click.self="closeModalAdd"
+        >
+          <Transition
+            enter-active-class="transition duration-300 ease-out"
+            enter-from-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+            enter-to-class="opacity-100 translate-y-0 sm:scale-100"
+            leave-active-class="transition duration-200 ease-in"
+            leave-from-class="opacity-100 translate-y-0 sm:scale-100"
+            leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+          >
+            <div
+              v-if="showModal"
+              class="bg-[#0B132B] p-6 rounded-lg shadow-md w-96 mx-4"
+              @click.stop
             >
-              Cancel
-            </button>
-            <button
-              @click="submitPO"
-              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
-            >
-              Create Order
-            </button>
-          </div>
+              <h2 class="text-lg font-semibold mb-4 text-white text-center">
+                Enter PO Number
+              </h2>
+
+              <div class="space-y-4">
+                <div>
+                  <label class="block text-gray-400 text-sm mb-1"
+                    >Work Order #</label
+                  >
+                  <input
+                    v-model="poNumber"
+                    type="text"
+                    placeholder="eg. APO2025-2024"
+                    class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div>
+                  <label class="block text-gray-400 text-sm mb-1"
+                    >Supplier Name</label
+                  >
+                  <input
+                    v-model="supplierName"
+                    type="text"
+                    placeholder="John Doe"
+                    class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                </div>
+
+                <!-- Address -->
+                <div>
+                  <label class="block text-gray-400 text-sm mb-1"
+                    >Address</label
+                  >
+                  <input
+                    v-model="address"
+                    type="text"
+                    placeholder="Legazpi City, Albay"
+                    class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                </div>
+
+                <!-- TIN ID -->
+                <div>
+                  <label class="block text-gray-400 text-sm mb-1">TIN ID</label>
+                  <input
+                    v-model="tin_ID"
+                    type="text"
+                    placeholder="716-412-421 VAT"
+                    class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                </div>
+
+                <!-- Mode of Procurement -->
+                <div>
+                  <label class="block text-gray-400 text-sm mb-1"
+                    >Mode of Procurement</label
+                  >
+                  <input
+                    v-model="modeofProcurement"
+                    type="text"
+                    placeholder="Small Value Procurement"
+                    class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                </div>
+
+                <!-- Delivery Date -->
+                <div>
+                  <label class="block text-gray-400 text-sm mb-1"
+                    >Delivery Date</label
+                  >
+                  <input
+                    v-model="deliveryDate"
+                    type="datetime-local"
+                    class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+
+              <div class="flex justify-end gap-2 mt-6">
+                <button
+                  @click="closeModalAdd"
+                  class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  @click="submitPO"
+                  class="px-4 py-2 bg-[#6A5CFE] text-white rounded-md hover:bg-[#7C6CFF] transition-colors"
+                >
+                  Create Order
+                </button>
+              </div>
+            </div>
+          </Transition>
         </div>
-      </div>
+      </Transition>
 
       <!--Sidebar Buttons-->
-
       <div class="mt-4 space-y-2">
         <!-- Documents (All) -->
         <div
@@ -609,6 +911,7 @@ const markAsCompleted = async () => {
           }}</span>
         </div>
       </div>
+      <!-- End of Sidebar Buttons -->
     </div>
 
     <!-- Data Table -->
@@ -655,15 +958,78 @@ const markAsCompleted = async () => {
                   @change="toggleAllSelection"
                 />
               </th>
-              <th class="p-0">Order #</th>
-              <th class="p-0">Handled by</th>
-              <th class="p-0">Created by</th>
-              <th class="p-0">Date Created</th>
+              <th
+                class="p-0 cursor-pointer hover:bg-gray-200"
+                @click="toggleSort('orderNumber')"
+              >
+                <div class="flex items-center gap-1 px-3 py-3">
+                  <span>Order #</span>
+                  <ChevronsUpDown
+                    v-if="sortField !== 'orderNumber'"
+                    class="h-4 w-4 text-gray-400"
+                  />
+                  <ChevronUp
+                    v-else-if="sortDirection === 'asc'"
+                    class="h-4 w-4 text-gray-600"
+                  />
+                  <ChevronDown v-else class="h-4 w-4 text-gray-600" />
+                </div>
+              </th>
+              <th
+                class="p-0 cursor-pointer hover:bg-gray-200"
+                @click="toggleSort('handledBy')"
+              >
+                <div class="flex items-center gap-1 px-3 py-3">
+                  <span>Handled by</span>
+                  <ChevronsUpDown
+                    v-if="sortField !== 'handledBy'"
+                    class="h-4 w-4 text-gray-400"
+                  />
+                  <ChevronUp
+                    v-else-if="sortDirection === 'asc'"
+                    class="h-4 w-4 text-gray-600"
+                  />
+                  <ChevronDown v-else class="h-4 w-4 text-gray-600" />
+                </div>
+              </th>
+              <th
+                class="p-0 cursor-pointer hover:bg-gray-200"
+                @click="toggleSort('createdBy')"
+              >
+                <div class="flex items-center gap-1 px-3 py-3">
+                  <span>Created by</span>
+                  <ChevronsUpDown
+                    v-if="sortField !== 'createdBy'"
+                    class="h-4 w-4 text-gray-400"
+                  />
+                  <ChevronUp
+                    v-else-if="sortDirection === 'asc'"
+                    class="h-4 w-4 text-gray-600"
+                  />
+                  <ChevronDown v-else class="h-4 w-4 text-gray-600" />
+                </div>
+              </th>
+              <th
+                class="p-0 cursor-pointer hover:bg-gray-200"
+                @click="toggleSort('dateCreated')"
+              >
+                <div class="flex items-center gap-1 px-3 py-3">
+                  <span>Date Created</span>
+                  <ChevronsUpDown
+                    v-if="sortField !== 'dateCreated'"
+                    class="h-4 w-4 text-gray-400"
+                  />
+                  <ChevronUp
+                    v-else-if="sortDirection === 'asc'"
+                    class="h-4 w-4 text-gray-600"
+                  />
+                  <ChevronDown v-else class="h-4 w-4 text-gray-600" />
+                </div>
+              </th>
             </tr>
           </thead>
         </table>
       </div>
-
       <!-- Scrollable Table Body -->
       <div
         class="border border-t-0 rounded-b-lg overflow-auto w-full max-h-[450px]"
@@ -671,7 +1037,7 @@ const markAsCompleted = async () => {
         <table class="w-full border-collapse bg-white">
           <tbody>
             <tr
-              v-for="doc in filteredDocuments"
+              v-for="doc in sortedDocuments"
               :key="doc.id"
               class="border-b hover:bg-gray-200 text-sm transition"
             >
@@ -706,86 +1072,151 @@ const markAsCompleted = async () => {
     </div>
 
     <!-- Overlay -->
-    <div
-      v-if="isModalOpen"
-      class="fixed inset-0 bg-black bg-opacity-50 flex justify-end"
+    <Transition
+      enter-active-class="transition duration-300 ease-out"
+      enter-from-class="opacity-0"
+      enter-to-class="opacity-100"
+      leave-active-class="transition duration-200 ease-in"
+      leave-from-class="opacity-100"
+      leave-to-class="opacity-0"
     >
-      <div class="w-96 bg-[#1A1F36] text-white p-6 shadow-lg relative">
-        <!-- Close Button -->
-        <button
-          class="absolute top-4 right-4 text-gray-400 hover:text-white"
-          @click="closeModal"
+      <div
+        v-if="isModalOpen"
+        class="fixed inset-0 bg-black bg-opacity-50 flex justify-end z-50"
+        @click.self="closeModal"
+      >
+        <Transition
+          enter-active-class="transition duration-300 ease-out transform"
+          enter-from-class="translate-x-full"
+          enter-to-class="translate-x-0"
+          leave-active-class="transition duration-200 ease-in transform"
+          leave-from-class="translate-x-0"
+          leave-to-class="translate-x-full"
         >
-          <X />
-        </button>
+          <div
+            v-if="isModalOpen"
+            class="w-96 bg-[#1A1F36] text-white p-6 shadow-lg relative h-screen overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden"
+          >
+            <!-- Close Button -->
+            <button
+              class="absolute top-4 right-4 text-gray-400 hover:text-white"
+              @click="closeModal"
+            >
+              <X />
+            </button>
 
-        <h2 class="text-lg font-bold">{{ selectedOrder?.orderNumber }}</h2>
-        <p class="text-sm text-gray-400">Order Details</p>
+            <!-- Header -->
+            <div class="mb-6">
+              <h2 class="text-xl font-bold">
+                {{ selectedOrder?.orderNumber }}
+              </h2>
+              <p class="text-sm text-gray-500">Order Details</p>
+            </div>
 
-     <!-- Order Details -->
-<div class="mt-4 text-sm">
-  <div class="flex justify-between">
-    <span class="text-gray-400">Created on</span>
-    <span>{{ selectedOrder?.dateCreated }}</span>
-  </div>
-  <div class="flex justify-between mt-2">
-  <span class="text-gray-400">Status</span>
-  <span 
-    class="px-2 py-1 text-black text-xs font-semibold rounded"
-    :class="{
-      'bg-yellow-500': selectedOrder?.status === 'Pending',
-      'bg-green-400': selectedOrder?.status === 'Completed',
-      'bg-red-500': selectedOrder?.status === 'Needs Action',
-      'bg-gray-500': !selectedOrder?.status
-    }"
-  >
-    {{ selectedOrder?.status || 'In progress' }}
-  </span>
-</div>
-</div>
+            <!-- Order Details -->
+            <div class="space-y-4">
+              <div>
+                <p class="text-sm text-gray-500">Created at</p>
+                <p class="font-medium">{{ selectedOrder?.dateCreated }}</p>
+              </div>
 
-        <!-- Handler Info -->
-        <div class="mt-6">
-          <h3 class="font-semibold">Handled By:</h3>
-          <p class="text-sm">{{ selectedOrder?.handledBy }}</p>
-          <p class="text-sm text-blue-400 underline">juandelacruz@gmail.com</p>
-          <p class="text-sm">09384874855</p>
-        </div>
-<!-- Timeline -->
-<Timeline :value="events" align="left" class="left-timeline">
-  <template #content="slotProps">
-    <div class="timeline-item">
-      <div class="timeline-title">{{ slotProps.item.title }}</div>
-      <div class="timeline-description">{{ slotProps.item.description }}</div>
-      <div v-if="slotProps.item.time" class="timeline-time">
-        {{ slotProps.item.time }}
+              <div>
+                <p class="text-sm text-gray-500">Status</p>
+                <span
+                  class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium"
+                  :class="{
+                    'bg-yellow-100 text-yellow-800':
+                      selectedOrder?.status === 'Pending',
+                    'bg-green-100 text-green-800':
+                      selectedOrder?.status === 'Completed',
+                    'bg-red-100 text-red-800':
+                      selectedOrder?.status === 'Needs Action',
+                    'bg-gray-100 text-gray-800': !selectedOrder?.status,
+                  }"
+                >
+                  {{ selectedOrder?.status || "In progress" }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Supplier Information -->
+            <div class="mt-6 border-t pt-4">
+              <h3 class="font-semibold mb-2">Supplier Information:</h3>
+              <div class="grid grid-cols-2 gap-2 text-sm">
+                <p class="text-gray-500">Supplier Name:</p>
+                <p>{{ selectedOrder?.supplierName || "Not set" }}</p>
+
+                <p class="text-gray-500">Address:</p>
+                <p>{{ selectedOrder?.address || "Not set" }}</p>
+
+                <p class="text-gray-500">TIN ID:</p>
+                <p>{{ selectedOrder?.tin_ID || "Not set" }}</p>
+
+                <p class="text-gray-500">Delivery Date:</p>
+                <p>{{ selectedOrder?.deliveryDate || "Not set" }}</p>
+
+                <p class="text-gray-500">Mode of Procurement:</p>
+                <p>{{ selectedOrder?.modeofProcurement || "Not set" }}</p>
+              </div>
+            </div>
+
+            <!-- Timeline -->
+            <div v-if="isAllowedRole">
+              <Timeline :value="events" align="left" class="left-timeline">
+                <template #content="slotProps">
+                  <div class="timeline-item">
+                    <div class="timeline-title">{{ slotProps.item.title }}</div>
+                    <div class="timeline-description">
+                      {{ slotProps.item.description }}
+                    </div>
+                    <div v-if="slotProps.item.time" class="timeline-time">
+                      {{ slotProps.item.time }}
+                    </div>
+                  </div>
+                </template>
+              </Timeline>
+            </div>
+
+            <!-- Overlay Timeline Action Buttons -->
+            <div class="mt-4">
+              <!-- Verify Document Button (only for admins) -->
+              <button
+                v-if="isAdmin && selectedOrder?.status === 'Pending'"
+                @click="verifyDocument"
+                class="px-4 py-2 bg-blue-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/50 active:scale-95 active:shadow-blue-500/75 active:bg-blue-700 mr-2"
+              >
+                Verify Document
+              </button>
+
+              <!-- Mark as Completed Button (only for admins) -->
+              <button
+                v-if="isAdmin && selectedOrder?.status === 'Verified'"
+                @click="markAsCompleted"
+                class="px-4 py-2 bg-green-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-green-600 hover:shadow-lg hover:shadow-green-500/50 active:scale-95 active:shadow-green-500/75 active:bg-green-700"
+              >
+                Mark as Completed
+              </button>
+
+              <!-- Completion status (visible to all) -->
+              <div
+                v-if="selectedOrder?.status === 'Completed'"
+                class="px-4 py-2 mt-4 bg-gray-200 text-gray-700 font-medium rounded-lg"
+              >
+                ✓ Already Completed
+              </div>
+            </div>
+          </div>
+        </Transition>
       </div>
-    </div>
-  </template>
-</Timeline>
+    </Transition>
 
-<template v-if="selectedOrder">
-  <button 
-    v-if="selectedOrder.status !== 'Completed'"
-    @click="markAsCompleted"
-    class="px-4 py-2 mt-4 bg-green-500 text-white font-medium rounded-lg 
-           transition-all duration-200 
-           hover:bg-green-600 hover:shadow-lg hover:shadow-green-500/50 
-           active:scale-95 active:shadow-green-500/75 active:bg-green-700"
-  >
-    Mark as Completed
-  </button>
-  <div v-else class="px-4 py-2 mt-4 bg-gray-200 text-gray-700 font-medium rounded-lg">
-    ✓ Already Completed
-  </div>
-</template>
-
-</div>
-    </div>
+    <!-- End of Overlay -->
 
     <!-- Delete Confirmation Popup -->
     <div
-      v-if="showDeleteConfirmation"class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      v-if="showDeleteConfirmation"
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      @click.self="closeDeletePopup"
     >
       <div class="bg-white p-6 rounded-lg shadow-lg w-96">
         <h2 class="text-lg font-semibold mb-4">Confirm Deletion</h2>
@@ -816,7 +1247,7 @@ const markAsCompleted = async () => {
 <style scoped>
 .left-timeline {
   margin-top: 20px; /* Adjust this value to control how much it shifts down */
-  padding-top: 0;  
+  padding-top: 0;
   margin-left: 0;
   padding-left: 0;
 }
@@ -841,7 +1272,6 @@ const markAsCompleted = async () => {
   margin-left: 0;
 }
 
-
 .timeline-title {
   font-weight: bold;
   margin-bottom: 0.25rem;
@@ -853,10 +1283,8 @@ const markAsCompleted = async () => {
   margin-top: 0.25rem;
 }
 
-
-
 .timeline-actor {
-  color: #2196F3;
+  color: #2196f3;
 }
 
 .timeline-time {
