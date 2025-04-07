@@ -1143,131 +1143,125 @@ onMounted(() => {
         </button> -->
       </div>
 
-      <!-- Table Header (Fixed) -->
-      <div class="border rounded-t-lg bg-gray-100">
-        <table class="w-full border-collapse">
-          <thead>
-            <tr class="text-gray-600 text-sm">
-              <th class="p-3 pr-5">
-                <input
-                  type="checkbox"
-                  class="w-4 h-4"
-                  v-model="selectAll"
-                  @change="toggleAllSelection"
-                />
-              </th>
-              <th
-                class="p-0 cursor-pointer hover:bg-gray-200"
-                @click="toggleSort('orderNumber')"
-              >
-                <div class="flex items-center gap-1 px-3 py-3">
-                  <span>Order #</span>
-                  <ChevronsUpDown
-                    v-if="sortField !== 'orderNumber'"
-                    class="h-4 w-4 text-gray-400"
-                  />
-                  <ChevronUp
-                    v-else-if="sortDirection === 'asc'"
-                    class="h-4 w-4 text-gray-600"
-                  />
-                  <ChevronDown v-else class="h-4 w-4 text-gray-600" />
-                </div>
-              </th>
-              <th
-                class="p-0 cursor-pointer hover:bg-gray-200"
-                @click="toggleSort('handledBy')"
-              >
-                <div class="flex items-center gap-1 px-3 py-3">
-                  <span>Handled by</span>
-                  <ChevronsUpDown
-                    v-if="sortField !== 'handledBy'"
-                    class="h-4 w-4 text-gray-400"
-                  />
-                  <ChevronUp
-                    v-else-if="sortDirection === 'asc'"
-                    class="h-4 w-4 text-gray-600"
-                  />
-                  <ChevronDown v-else class="h-4 w-4 text-gray-600" />
-                </div>
-              </th>
-              <th
-                class="p-0 cursor-pointer hover:bg-gray-200"
-                @click="toggleSort('createdBy')"
-              >
-                <div class="flex items-center gap-1 px-3 py-3">
-                  <span>Created by</span>
-                  <ChevronsUpDown
-                    v-if="sortField !== 'createdBy'"
-                    class="h-4 w-4 text-gray-400"
-                  />
-                  <ChevronUp
-                    v-else-if="sortDirection === 'asc'"
-                    class="h-4 w-4 text-gray-600"
-                  />
-                  <ChevronDown v-else class="h-4 w-4 text-gray-600" />
-                </div>
-              </th>
-              <th
-                class="p-0 cursor-pointer hover:bg-gray-200"
-                @click="toggleSort('dateCreated')"
-              >
-                <div class="flex items-center gap-1 px-3 py-3">
-                  <span>Date Created</span>
-                  <ChevronsUpDown
-                    v-if="sortField !== 'dateCreated'"
-                    class="h-4 w-4 text-gray-400"
-                  />
-                  <ChevronUp
-                    v-else-if="sortDirection === 'asc'"
-                    class="h-4 w-4 text-gray-600"
-                  />
-                  <ChevronDown v-else class="h-4 w-4 text-gray-600" />
-                </div>
-              </th>
-            </tr>
-          </thead>
-        </table>
-      </div>
-      <!-- Scrollable Table Body -->
-      <div
-        class="border border-t-0 rounded-b-lg overflow-auto w-full max-h-[450px]"
-      >
-        <table class="w-full border-collapse bg-white">
-          <tbody>
-            <tr
-              v-for="doc in sortedDocuments"
-              :key="doc.id"
-              class="border-b hover:bg-gray-200 text-sm transition"
-            >
-              <td class="p-3 pl-12">
-                <input
-                  type="checkbox"
-                  class="w-4 h-4"
-                  :value="doc.id"
-                  v-model="selectedDocuments"
-                />
-              </td>
-              <!-- <td class="p-3 pl-12">
-                <input type="checkbox" class="w-4 h-4" />
-              </td> -->
-              <td class="p-3">
-                <a
-                  href="#"
-                  class="text-blue-600 cursor-pointer"
-                  @click.prevent="openModal(doc)"
-                >
-                  {{ doc.orderNumber }}
-                </a>
-                <div class="text-xs text-gray-500">{{ doc.trackingId }}</div>
-              </td>
-              <td class="p-3 font-semibold">{{ doc.handledBy }}</td>
-              <td class="p-3 font-semibold">{{ doc.createdBy }}</td>
-              <td class="p-3">{{ doc.dateCreated }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+     <!-- Table Header (Fixed) -->
+<div class="border rounded-t-lg bg-gray-100">
+  <table class="w-full border-collapse">
+    <thead>
+      <tr class="text-gray-600 text-sm">
+        <!-- Checkbox Column -->
+        <th class="w-12 p-3 text-left">
+          <input
+            type="checkbox"
+            class="w-10 h-4"
+            v-model="selectAll"
+            @change="toggleAllSelection"
+          />
+        </th>
+        
+        <!-- Order # Column -->
+        <th class="p-3 text-left cursor-pointer" @click="toggleSort('orderNumber')">
+          <div class="flex items-center gap-1">
+            <span>Order #</span>
+            <ChevronsUpDown
+              v-if="sortField !== 'orderNumber'"
+              class="h-4 w-4 text-gray-400"
+            />
+            <ChevronUp
+              v-else-if="sortDirection === 'asc'"
+              class="h-4 w-4 text-gray-600"
+            />
+            <ChevronDown v-else class="h-4 w-4 text-gray-600" />
+          </div>
+        </th>
+        
+        <!-- Handled By Column -->
+        <th class="p-3 text-left cursor-pointer" @click="toggleSort('handledBy')">
+          <div class="flex items-center gap-1">
+            <span>Handled by</span>
+            <ChevronsUpDown
+              v-if="sortField !== 'handledBy'"
+              class="h-4 w-4 text-gray-400"
+            />
+            <ChevronUp
+              v-else-if="sortDirection === 'asc'"
+              class="h-4 w-4 text-gray-600"
+            />
+            <ChevronDown v-else class="h-4 w-4 text-gray-600" />
+          </div>
+        </th>
+        
+        <!-- Created By Column -->
+        <th class="p-3 text-left cursor-pointer" @click="toggleSort('createdBy')">
+          <div class="flex items-center gap-1">
+            <span>Created by</span>
+            <ChevronsUpDown
+              v-if="sortField !== 'createdBy'"
+              class="h-4 w-4 text-gray-400"
+            />
+            <ChevronUp
+              v-else-if="sortDirection === 'asc'"
+              class="h-4 w-4 text-gray-600"
+            />
+            <ChevronDown v-else class="h-4 w-4 text-gray-600" />
+          </div>
+        </th>
+        
+        <!-- Date Created Column -->
+        <th class="p-3 text-left cursor-pointer" @click="toggleSort('dateCreated')">
+          <div class="flex items-center gap-1">
+            <span>Date Created</span>
+            <ChevronsUpDown
+              v-if="sortField !== 'dateCreated'"
+              class="h-4 w-4 text-gray-400"
+            />
+            <ChevronUp
+              v-else-if="sortDirection === 'asc'"
+              class="h-4 w-4 text-gray-600"
+            />
+            <ChevronDown v-else class="h-4 w-4 text-gray-600" />
+          </div>
+        </th>
+      </tr>
+    </thead>
+  </table>
+</div>
+
+      <!-- Table Body -->
+<div class="border border-t-0 rounded-b-lg overflow-auto w-full max-h-[450px]">
+  <table class="w-full border-collapse bg-white">
+    <tbody>
+      <tr v-for="doc in sortedDocuments" :key="doc.id" class="border-b hover:bg-gray-200 text-sm">
+        <!-- Checkbox Cell -->
+        <td class="p-3 text-left">
+          <input
+            type="checkbox"
+            class="w-10 h-4"
+            :value="doc.id"
+            v-model="selectedDocuments"
+          />
+        </td>
+        
+        <!-- Order # Cell -->
+        <td class="p-3 text-left">
+          <a href="#" class="text-blue-600 hover:underline" @click.prevent="openModal(doc)">
+            {{ doc.orderNumber }}
+          </a>
+          <div class="text-xs text-gray-500">{{ doc.trackingId }}</div>
+        </td>
+        
+        <!-- Handled By Cell -->
+        <td class="p-3 text-left">{{ doc.handledBy }}</td>
+        
+        <!-- Created By Cell -->
+        <td class="p-3 text-left">{{ doc.createdBy }}</td>
+        
+        <!-- Date Created Cell -->
+        <td class="p-3 text-left">{{ doc.dateCreated }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+</div>
 
     <!-- Overlay -->
     <Transition
@@ -1508,4 +1502,40 @@ onMounted(() => {
   padding-left: 2 !important;
   margin-left: 2 !important;
 }
+/* Add to your style section */
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  padding: 12px 16px;
+  text-align: left;
+  vertical-align: left;
+}
+
+
+
+th:last-child, td:last-child {
+  border-right: none;
+}
+
+/* Make sure the checkbox column doesn't shift */
+th:first-child, td:first-child {
+  width: 100px; /* Fixed width for checkbox column */
+  padding-left: px; /* Consistent padding */
+}
+/* 
+Add subtle hover effect
+tr:hover td {
+  background-color: #f9fafb;
+} */
+
+/* Example of setting column widths */
+th:nth-child(2), td:nth-child(2) { width: 25%; }  /* Order # */
+th:nth-child(3), td:nth-child(3) { width: 25%; }  /* Handled by */
+th:nth-child(4), td:nth-child(4) { width: 25%; }  /* Created by */
+
+/* etc */
+
 </style>
