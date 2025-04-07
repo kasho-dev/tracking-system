@@ -3,7 +3,7 @@
 // import Vue from "../assets/vue.svg";
 // import Button from "primevue/button";
 // import { defineStore } from "pinia";
-import { onMounted, ref, computed, watch, onUnmounted } from "vue";
+import { onMounted, ref, computed } from "vue";
 import { useSearchStore } from "../stores/searchStore"; // Import the Pinia store
 import * as XLSX from "xlsx";
 import Timeline from "primevue/timeline";
@@ -122,7 +122,6 @@ const fetchSelectedOrder = async () => {
   }
 };
 
-
 const startPolling = () => {
   // Fetch documents immediately
   fetchDocuments();
@@ -150,14 +149,14 @@ const startPolling = () => {
 // End of Refresh Interval
 
 //Timeline Script
-const verificationTime = ref<string | null>(null);
-const timelineEvents = ref<
-  Array<{
-    title: string;
-    description: string;
-    time?: string;
-  }>
->([]);
+// const verificationTime = ref<string | null>(null);
+// const timelineEvents = ref<
+//   Array<{
+//     title: string;
+//     description: string;
+//     time?: string;
+//   }>
+// >([]);
 
 const isAllowedRole = computed(() => {
   const allowedRoles = ["admin", "user", "supplier"];
@@ -207,7 +206,9 @@ const verifyDocument = async () => {
         };
 
         // Update backend
-        await pb.collection("Collection_1").update(selectedOrder.value.id, updateData);
+        await pb
+          .collection("Collection_1")
+          .update(selectedOrder.value.id, updateData);
 
         // Update local state
         Object.assign(selectedOrder.value, updateData);
@@ -248,7 +249,9 @@ const verifyDocument = async () => {
       updatedAt: verificationTimestamp,
     };
 
-    await pb.collection("Collection_1").update(selectedOrder.value.id, updateData);
+    await pb
+      .collection("Collection_1")
+      .update(selectedOrder.value.id, updateData);
 
     // Update local state
     Object.assign(selectedOrder.value, updateData);
@@ -265,7 +268,6 @@ const verifyDocument = async () => {
     alert("Failed to verify document. Please try again.");
   }
 };
-
 
 // Timeline Events Handler
 const events = computed(() => {
@@ -293,13 +295,17 @@ const events = computed(() => {
 
   // 3. MANDATORY completion event (only if status is Completed)
   if (selectedOrder.value.status === "Completed") {
-    const completionTime = selectedOrder.value.completedAt || 
-      selectedOrder.value.verificationEvents?.find(e => e.type === "final")?.timestamp;
-    
+    const completionTime =
+      selectedOrder.value.completedAt ||
+      selectedOrder.value.verificationEvents?.find((e) => e.type === "final")
+        ?.timestamp;
+
     if (completionTime) {
       timelineEvents.push({
         title: "Document Completed",
-        description: `Completed by ${selectedOrder.value.verifiedByName || "System"}`,
+        description: `Completed by ${
+          selectedOrder.value.verifiedByName || "System"
+        }`,
         time: formatTimestamp(completionTime),
       });
     }
@@ -308,18 +314,16 @@ const events = computed(() => {
   return timelineEvents;
 });
 
-
 // Helper function for verification titles
 const getVerificationTitle = (type: string): string => {
   const titleMap: Record<string, string> = {
     initial: "Initial Verification",
     acknowledgement: "Verification Acknowledged",
     final: "Final Verification",
-    completed: "Document Completed" // Added for completeness
+    completed: "Document Completed", // Added for completeness
   };
   return titleMap[type] || "Verification Step";
 };
-
 
 // Helper function to consistently format timestamps
 const formatTimestamp = (timestamp: string) => {
@@ -333,39 +337,39 @@ const formatTimestamp = (timestamp: string) => {
   });
 };
 
-const completeDocument = async () => {
-  if (!selectedOrder.value) return;
+// const completeDocument = async () => {
+//   if (!selectedOrder.value) return;
 
-  // Validation - should never happen in normal flow
-  if (!selectedOrder.value.verifiedAt) {
-    alert("Document must be verified before completion");
-    return;
-  }
+//   // Validation - should never happen in normal flow
+//   if (!selectedOrder.value.verifiedAt) {
+//     alert("Document must be verified before completion");
+//     return;
+//   }
 
-  const completionTimestamp = new Date().toISOString();
+//   const completionTimestamp = new Date().toISOString();
 
-  try {
-    await pb.collection("Collection_1").update(selectedOrder.value.id, {
-      status: "Completed",
-      completedAt: completionTimestamp,
-      updatedAt: completionTimestamp,
-    });
+//   try {
+//     await pb.collection("Collection_1").update(selectedOrder.value.id, {
+//       status: "Completed",
+//       completedAt: completionTimestamp,
+//       updatedAt: completionTimestamp,
+//     });
 
-    // Update all relevant state
-    selectedOrder.value.status = "Completed";
-    selectedOrder.value.completedAt = completionTimestamp;
+//     // Update all relevant state
+//     selectedOrder.value.status = "Completed";
+//     selectedOrder.value.completedAt = completionTimestamp;
 
-    const docIndex = documents.value.findIndex(
-      (d) => d.id === selectedOrder.value?.id
-    );
-    if (docIndex !== -1) {
-      documents.value[docIndex].status = "Completed";
-      documents.value[docIndex].completedAt = completionTimestamp;
-    }
-  } catch (error) {
-    console.error("Completion failed:", error);
-  }
-};
+//     const docIndex = documents.value.findIndex(
+//       (d) => d.id === selectedOrder.value?.id
+//     );
+//     if (docIndex !== -1) {
+//       documents.value[docIndex].status = "Completed";
+//       documents.value[docIndex].completedAt = completionTimestamp;
+//     }
+//   } catch (error) {
+//     console.error("Completion failed:", error);
+//   }
+// };
 
 // End of Timeline Script
 
@@ -602,49 +606,62 @@ const closeModal = () => {
 const documents = ref<Document[]>([]);
 
 //Checkbox Function
-const selectAll = ref(false);
+// const selectAll = ref(false);
 const selectedDocuments = ref<string[]>([]);
 
 // Check if all checkboxes are selected
-const areAllSelected = computed(
-  () => selectedDocuments.value.length === documents.value.length
-);
+const areAllSelected = computed(() => {
+  const filteredIds = filteredDocuments.value.map((doc) => doc.id);
+  return (
+    filteredIds.length > 0 &&
+    filteredIds.every((id) => selectedDocuments.value.includes(id))
+  );
+});
 
-const toggleSelection = (id: string) => {
-  // Changed parameter type
-  const index = selectedDocuments.value.indexOf(id);
-  if (index > -1) {
-    selectedDocuments.value.splice(index, 1);
-  } else {
-    selectedDocuments.value.push(id);
-  }
-};
+// const toggleSelection = (id: string) => {
+//   // Changed parameter type
+//   const index = selectedDocuments.value.indexOf(id);
+//   if (index > -1) {
+//     selectedDocuments.value.splice(index, 1);
+//   } else {
+//     selectedDocuments.value.push(id);
+//   }
+// };
 
 const toggleAllSelection = () => {
+  const filteredIds = filteredDocuments.value.map((doc) => doc.id);
   const shouldSelectAll = !areAllSelected.value;
-  selectedDocuments.value = shouldSelectAll
-    ? documents.value.map((doc) => doc.id)
-    : [];
-  selectAll.value = shouldSelectAll;
+
+  if (shouldSelectAll) {
+    // Add all filtered documents to selection
+    selectedDocuments.value = [
+      ...new Set([...selectedDocuments.value, ...filteredIds]),
+    ];
+  } else {
+    // Remove all filtered documents from selection
+    selectedDocuments.value = selectedDocuments.value.filter(
+      (id) => !filteredIds.includes(id)
+    );
+  }
 };
 
 // Watch for individual checkbox changes and update "Select All" state
-watch(selectedDocuments, (newVal) => {
-  selectAll.value = newVal.length === documents.value.length; // If all are selected, check header
-});
+// watch(selectedDocuments, (newVal) => {
+//   selectAll.value = newVal.length === documents.value.length; // If all are selected, check header
+// });
 
 //Download Function
-const selectedOverlayDocuments = ref<string[]>([]);
+// const selectedOverlayDocuments = ref<string[]>([]);
 
-const toggleOverlaySelection = (id: string) => {
-  // Changed parameter type
-  const index = selectedOverlayDocuments.value.indexOf(id);
-  if (index > -1) {
-    selectedOverlayDocuments.value.splice(index, 1);
-  } else {
-    selectedOverlayDocuments.value.push(id);
-  }
-};
+// const toggleOverlaySelection = (id: string) => {
+//   // Changed parameter type
+//   const index = selectedOverlayDocuments.value.indexOf(id);
+//   if (index > -1) {
+//     selectedOverlayDocuments.value.splice(index, 1);
+//   } else {
+//     selectedOverlayDocuments.value.push(id);
+//   }
+// };
 
 const downloadSelectedDocuments = () => {
   // Filter selected documents that match the active status and are XLSX files
@@ -741,7 +758,11 @@ const deleteSelectedDocuments = async () => {
     documents.value = documents.value.filter(
       (doc) => !documentsToDelete.value.includes(doc.id)
     );
+
+    // Reset the selected documents and selectAll state
     selectedDocuments.value = [];
+    // selectAll.value = false;
+
     showDeleteConfirmation.value = false;
 
     console.log("Successfully deleted documents:", documentsToDelete.value);
@@ -752,11 +773,11 @@ const deleteSelectedDocuments = async () => {
 };
 
 //Checkbox Change Icon Function
-const handleCheckboxChange = (id: string) => {
-  // Changed parameter type
-  toggleSelection(id);
-  toggleOverlaySelection(id);
-};
+// const handleCheckboxChange = (id: string) => {
+//   // Changed parameter type
+//   toggleSelection(id);
+//   toggleOverlaySelection(id);
+// };
 
 // Computed property to filter documents
 const filteredDocuments = computed(() => {
@@ -779,55 +800,64 @@ const filteredDocuments = computed(() => {
   } else if (activeButton.value === "Needs Action") {
     filtered = filtered.filter((doc) => doc.status === "Needs Action");
   } else if (activeButton.value === "Pending") {
-    filtered = filtered.filter((doc) => doc.status === "Pending");
-  } else if (activeButton.value === "Verified") {
-    filtered = filtered.filter((doc) => doc.status === "Verified");
+    // Show both Pending and Verified documents
+    filtered = filtered.filter(
+      (doc) => doc.status === "Pending" || doc.status === "Verified"
+    );
   }
 
   return filtered;
 });
 
+
 // Computed property: Count documents by status
 const statusCounts = computed(() => {
   return documents.value.reduce((acc, doc) => {
-    acc[doc.status] = (acc[doc.status] || 0) + 1;
+    // Group Pending and Verified together for the Pending count
+    if (doc.status === "Pending" || doc.status === "Verified") {
+      acc.Pending = (acc.Pending || 0) + 1;
+    }
+    // Keep other statuses separate
+    if (doc.status !== "Pending" && doc.status !== "Verified") {
+      acc[doc.status] = (acc[doc.status] || 0) + 1;
+    }
     return acc;
   }, {} as Record<string, number>);
 });
 
 // For changing document status to "Completed"
-const markAsCompleted = async () => {
-  if (!selectedOrder.value) return;
+// const markAsCompleted = async () => {
+//   if (!selectedOrder.value) return;
 
-  try {
-    const completionTimestamp = new Date().toISOString();
+//   try {
+//     const completionTimestamp = new Date().toISOString();
 
-    // Update in PocketBase with completion time
-    await pb.collection("Collection_1").update(selectedOrder.value.id, {
-      status: "Completed",
-      completedAt: completionTimestamp,
-      updatedAt: completionTimestamp,
-    });
+//     // Update in PocketBase with completion time
+//     await pb.collection("Collection_1").update(selectedOrder.value.id, {
+//       status: "Completed",
+//       completedAt: completionTimestamp,
+//       updatedAt: completionTimestamp,
+//     });
 
-    // Update local state
-    selectedOrder.value.status = "Completed";
-    selectedOrder.value.completedAt = completionTimestamp;
-    selectedOrder.value.updatedAt = completionTimestamp;
+//     // Update local state
+//     selectedOrder.value.status = "Completed";
+//     selectedOrder.value.completedAt = completionTimestamp;
+//     selectedOrder.value.updatedAt = completionTimestamp;
 
-    // Update in documents array
-    const docIndex = documents.value.findIndex(
-      (doc) => doc.id === selectedOrder.value?.id
-    );
-    if (docIndex !== -1) {
-      documents.value[docIndex].status = "Completed";
-      documents.value[docIndex].completedAt = completionTimestamp;
-      documents.value[docIndex].updatedAt = completionTimestamp;
-    }
-  } catch (error) {
-    console.error("Error completing document:", error);
-    alert("Failed to complete document. Please try again.");
-  }
-};
+//     // Update in documents array
+//     const docIndex = documents.value.findIndex(
+//       (doc) => doc.id === selectedOrder.value?.id
+//     );
+//     if (docIndex !== -1) {
+//       documents.value[docIndex].status = "Completed";
+//       documents.value[docIndex].completedAt = completionTimestamp;
+//       documents.value[docIndex].updatedAt = completionTimestamp;
+//     }
+//   } catch (error) {
+//     console.error("Error completing document:", error);
+//     alert("Failed to complete document. Please try again.");
+//   }
+// };
 
 // const for Admin only previews
 // Use this to hide admin features from non-admin users
@@ -1126,125 +1156,147 @@ onMounted(() => {
         </button> -->
       </div>
 
-     <!-- Table Header (Fixed) -->
-<div class="border rounded-t-lg bg-gray-100">
-  <table class="w-full border-collapse">
-    <thead>
-      <tr class="text-gray-600 text-sm">
-        <!-- Checkbox Column -->
-        <th class="w-12 p-3 text-left">
-          <input
-            type="checkbox"
-            class="w-10 h-4"
-            v-model="selectAll"
-            @change="toggleAllSelection"
-          />
-        </th>
-        
-        <!-- Order # Column -->
-        <th class="p-3 text-left cursor-pointer" @click="toggleSort('orderNumber')">
-          <div class="flex items-center gap-1">
-            <span>Order #</span>
-            <ChevronsUpDown
-              v-if="sortField !== 'orderNumber'"
-              class="h-4 w-4 text-gray-400"
-            />
-            <ChevronUp
-              v-else-if="sortDirection === 'asc'"
-              class="h-4 w-4 text-gray-600"
-            />
-            <ChevronDown v-else class="h-4 w-4 text-gray-600" />
-          </div>
-        </th>
-        
-        <!-- Handled By Column -->
-        <th class="p-3 text-left cursor-pointer" @click="toggleSort('handledBy')">
-          <div class="flex items-center gap-1">
-            <span>Handled by</span>
-            <ChevronsUpDown
-              v-if="sortField !== 'handledBy'"
-              class="h-4 w-4 text-gray-400"
-            />
-            <ChevronUp
-              v-else-if="sortDirection === 'asc'"
-              class="h-4 w-4 text-gray-600"
-            />
-            <ChevronDown v-else class="h-4 w-4 text-gray-600" />
-          </div>
-        </th>
-        
-        <!-- Created By Column -->
-        <th class="p-3 text-left cursor-pointer" @click="toggleSort('createdBy')">
-          <div class="flex items-center gap-1">
-            <span>Created by</span>
-            <ChevronsUpDown
-              v-if="sortField !== 'createdBy'"
-              class="h-4 w-4 text-gray-400"
-            />
-            <ChevronUp
-              v-else-if="sortDirection === 'asc'"
-              class="h-4 w-4 text-gray-600"
-            />
-            <ChevronDown v-else class="h-4 w-4 text-gray-600" />
-          </div>
-        </th>
-        
-        <!-- Date Created Column -->
-        <th class="p-3 text-left cursor-pointer" @click="toggleSort('dateCreated')">
-          <div class="flex items-center gap-1">
-            <span>Date Created</span>
-            <ChevronsUpDown
-              v-if="sortField !== 'dateCreated'"
-              class="h-4 w-4 text-gray-400"
-            />
-            <ChevronUp
-              v-else-if="sortDirection === 'asc'"
-              class="h-4 w-4 text-gray-600"
-            />
-            <ChevronDown v-else class="h-4 w-4 text-gray-600" />
-          </div>
-        </th>
-      </tr>
-    </thead>
-  </table>
-</div>
+      <!-- Table Header (Fixed) -->
+      <div class="border rounded-t-lg bg-gray-100">
+        <table class="w-full border-collapse">
+          <thead>
+            <tr class="text-gray-600 text-sm">
+              <!-- Checkbox Column -->
+              <th class="w-12 p-3 text-left">
+                <input
+                  type="checkbox"
+                  class="w-10 h-4"
+                  :checked="areAllSelected"
+                  @change="toggleAllSelection"
+                />
+              </th>
+
+              <!-- Order # Column -->
+              <th
+                class="p-3 text-left cursor-pointer"
+                @click="toggleSort('orderNumber')"
+              >
+                <div class="flex items-center gap-1">
+                  <span>Order #</span>
+                  <ChevronsUpDown
+                    v-if="sortField !== 'orderNumber'"
+                    class="h-4 w-4 text-gray-400"
+                  />
+                  <ChevronUp
+                    v-else-if="sortDirection === 'asc'"
+                    class="h-4 w-4 text-gray-600"
+                  />
+                  <ChevronDown v-else class="h-4 w-4 text-gray-600" />
+                </div>
+              </th>
+
+              <!-- Handled By Column -->
+              <th
+                class="p-3 text-left cursor-pointer"
+                @click="toggleSort('handledBy')"
+              >
+                <div class="flex items-center gap-1">
+                  <span>Handled by</span>
+                  <ChevronsUpDown
+                    v-if="sortField !== 'handledBy'"
+                    class="h-4 w-4 text-gray-400"
+                  />
+                  <ChevronUp
+                    v-else-if="sortDirection === 'asc'"
+                    class="h-4 w-4 text-gray-600"
+                  />
+                  <ChevronDown v-else class="h-4 w-4 text-gray-600" />
+                </div>
+              </th>
+
+              <!-- Created By Column -->
+              <th
+                class="p-3 text-left cursor-pointer"
+                @click="toggleSort('createdBy')"
+              >
+                <div class="flex items-center gap-1">
+                  <span>Created by</span>
+                  <ChevronsUpDown
+                    v-if="sortField !== 'createdBy'"
+                    class="h-4 w-4 text-gray-400"
+                  />
+                  <ChevronUp
+                    v-else-if="sortDirection === 'asc'"
+                    class="h-4 w-4 text-gray-600"
+                  />
+                  <ChevronDown v-else class="h-4 w-4 text-gray-600" />
+                </div>
+              </th>
+
+              <!-- Date Created Column -->
+              <th
+                class="p-3 text-left cursor-pointer"
+                @click="toggleSort('dateCreated')"
+              >
+                <div class="flex items-center gap-1">
+                  <span>Date Created</span>
+                  <ChevronsUpDown
+                    v-if="sortField !== 'dateCreated'"
+                    class="h-4 w-4 text-gray-400"
+                  />
+                  <ChevronUp
+                    v-else-if="sortDirection === 'asc'"
+                    class="h-4 w-4 text-gray-600"
+                  />
+                  <ChevronDown v-else class="h-4 w-4 text-gray-600" />
+                </div>
+              </th>
+            </tr>
+          </thead>
+        </table>
+      </div>
 
       <!-- Table Body -->
-<div class="border border-t-0 rounded-b-lg overflow-auto w-full max-h-[450px]">
-  <table class="w-full border-collapse bg-white">
-    <tbody>
-      <tr v-for="doc in sortedDocuments" :key="doc.id" class="border-b hover:bg-gray-200 text-sm">
-        <!-- Checkbox Cell -->
-        <td class="p-3 text-left">
-          <input
-            type="checkbox"
-            class="w-10 h-4"
-            :value="doc.id"
-            v-model="selectedDocuments"
-          />
-        </td>
-        
-        <!-- Order # Cell -->
-        <td class="p-3 text-left">
-          <a href="#" class="text-blue-600 hover:underline" @click.prevent="openModal(doc)">
-            {{ doc.orderNumber }}
-          </a>
-          <div class="text-xs text-gray-500">{{ doc.trackingId }}</div>
-        </td>
-        
-        <!-- Handled By Cell -->
-        <td class="p-3 text-left">{{ doc.handledBy }}</td>
-        
-        <!-- Created By Cell -->
-        <td class="p-3 text-left">{{ doc.createdBy }}</td>
-        
-        <!-- Date Created Cell -->
-        <td class="p-3 text-left">{{ doc.dateCreated }}</td>
-      </tr>
-    </tbody>
-  </table>
-</div>
-</div>
+      <div
+        class="border border-t-0 rounded-b-lg overflow-auto w-full max-h-[450px]"
+      >
+        <table class="w-full border-collapse bg-white">
+          <tbody>
+            <tr
+              v-for="doc in sortedDocuments"
+              :key="doc.id"
+              class="border-b hover:bg-gray-200 text-sm"
+            >
+              <!-- Checkbox Cell -->
+              <td class="p-3 text-left">
+                <input
+                  type="checkbox"
+                  class="w-10 h-4"
+                  :value="doc.id"
+                  v-model="selectedDocuments"
+                />
+              </td>
+
+              <!-- Order # Cell -->
+              <td class="p-3 text-left">
+                <a
+                  href="#"
+                  class="text-blue-600 hover:underline"
+                  @click.prevent="openModal(doc)"
+                >
+                  {{ doc.orderNumber }}
+                </a>
+                <div class="text-xs text-gray-500">{{ doc.trackingId }}</div>
+              </td>
+
+              <!-- Handled By Cell -->
+              <td class="p-3 text-left">{{ doc.handledBy }}</td>
+
+              <!-- Created By Cell -->
+              <td class="p-3 text-left">{{ doc.createdBy }}</td>
+
+              <!-- Date Created Cell -->
+              <td class="p-3 text-left">{{ doc.dateCreated }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
 
     <!-- Overlay -->
     <Transition
@@ -1491,20 +1543,21 @@ table {
   border-collapse: collapse;
 }
 
-th, td {
+th,
+td {
   padding: 12px 16px;
   text-align: left;
   vertical-align: left;
 }
 
-
-
-th:last-child, td:last-child {
+th:last-child,
+td:last-child {
   border-right: none;
 }
 
 /* Make sure the checkbox column doesn't shift */
-th:first-child, td:first-child {
+th:first-child,
+td:first-child {
   width: 100px; /* Fixed width for checkbox column */
   padding-left: px; /* Consistent padding */
 }
@@ -1515,10 +1568,18 @@ tr:hover td {
 } */
 
 /* Example of setting column widths */
-th:nth-child(2), td:nth-child(2) { width: 25%; }  /* Order # */
-th:nth-child(3), td:nth-child(3) { width: 25%; }  /* Handled by */
-th:nth-child(4), td:nth-child(4) { width: 25%; }  /* Created by */
+th:nth-child(2),
+td:nth-child(2) {
+  width: 25%;
+} /* Order # */
+th:nth-child(3),
+td:nth-child(3) {
+  width: 25%;
+} /* Handled by */
+th:nth-child(4),
+td:nth-child(4) {
+  width: 25%;
+} /* Created by */
 
 /* etc */
-
 </style>
