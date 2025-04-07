@@ -37,9 +37,19 @@ interface Document {
   tin_ID: string;
   modeofProcurement: string;
   deliveryDate: string;
+
+  verificationEvents?: Array<{
+    type: string; // 'initial', 'acknowledgement', 'final'
+    timestamp: string;
+    userId: string;
+    userName: string;
+  }>;
+
   verifiedAt?: string;
-  completedAt?: string; // Add this
-  updatedAt?: string; // General last updated timestamp
+  verifiedBy?: string;
+  verifiedByName?: string;
+  completedAt?: string;
+  updatedAt?: string;
 }
 
 // Linked Pocketbase
@@ -48,42 +58,70 @@ const pb = new PocketBase("http://127.0.0.1:8090");
 const searchStore = useSearchStore(); // ✅ Initialize store
 
 // Refresh Table Every Second
-const refreshInterval = ref<ReturnType<typeof setInterval> | null>(null);
+// const refreshInterval = ref<ReturnType<typeof setInterval> | null>(null);
 const isOverlayOpen = ref(false);
 
 const fetchSelectedOrder = async () => {
   if (!selectedOrder.value) return;
-  
+
   try {
-    const record = await pb.collection("Collection_1").getOne(selectedOrder.value.id, {
-      expand: "verifiedAt,completedAt,updatedAt"
-    });
-    
+    const record = await pb
+      .collection("Collection_1")
+      .getOne(selectedOrder.value.id, {
+        expand:
+          "verifiedAt,completedAt,updatedAt,verifiedBy,verificationEvents.userId",
+      });
+
+    // ENSURE completedAt is never lost
+    if (selectedOrder.value.status === "Completed" && !record.completedAt) {
+      await pb.collection("Collection_1").update(selectedOrder.value.id, {
+        completedAt: selectedOrder.value.completedAt,
+      });
+    }
+
     selectedOrder.value = {
+      ...selectedOrder.value,
+      completedAt: record.completedAt || selectedOrder.value.completedAt,
       id: record.id,
       orderNumber: `${record.Order_No}`,
-      trackingId: record.trackingId || "", // Ensure trackingId is included
-      handledBy: record.handledBy || "Unknown", // Default if missing
-      createdBy: record.createdBy || "Unknown", // Default if missing
+      trackingId: record.trackingId || "",
+      handledBy: record.handledBy || "Unknown",
+      createdBy: record.createdBy || "Unknown",
       dateCreated: new Date(record.created).toLocaleString(),
-      status: record.status || "Unknown", // Default if missing
-      fileType: record.fileType || "xlsx", // Default if missing
-      supplierName: record.supplierName || "Unknown", // Default if missing
-      address: record.address || "Unknown", // Default if missing
-      tin_ID: record.tin_ID || "Unknown", // Default if missing
-      modeofProcurement: record.modeofProcurement || "Unknown", // Default if missing
-      deliveryDate: record.deliveryDate 
+      status: record.status || "Unknown",
+      fileType: record.fileType || "xlsx",
+      supplierName: record.supplierName || "Unknown",
+      address: record.address || "Unknown",
+      tin_ID: record.tin_ID || "Unknown",
+      modeofProcurement: record.modeofProcurement || "Unknown",
+      deliveryDate: record.deliveryDate
         ? new Date(record.deliveryDate).toLocaleDateString()
         : "",
       verifiedAt: record.verifiedAt,
-      completedAt: record.completedAt,
-      updatedAt: record.updatedAt
+      verifiedBy: record.verifiedBy,
+      verifiedByName:
+        record.expand?.verifiedBy?.name ||
+        record.expand?.verifiedBy?.email ||
+        "System",
+      updatedAt: record.updatedAt,
+      verificationEvents: record.verificationEvents?.map((event: any) => ({
+        type: event.type,
+        timestamp: event.timestamp,
+        userId: event.userId,
+        userName:
+          record.expand?.["verificationEvents.userId"]?.find(
+            (u: any) => u.id === event.userId
+          )?.name ||
+          record.expand?.["verificationEvents.userId"]?.find(
+            (u: any) => u.id === event.userId
+          )?.email ||
+          "Unknown",
+      })),
     };
   } catch (error) {
     console.error("Error refreshing selected order:", error);
   }
 };
-
 
 const startPolling = () => {
   // Fetch documents immediately
@@ -95,20 +133,20 @@ const startPolling = () => {
   }
 
   // Set up interval for every second
-  refreshInterval.value = setInterval(() => {
-    fetchDocuments();
-    if (isOverlayOpen.value) {
-      fetchSelectedOrder();
-    }
-  }, 1000);
+  // refreshInterval.value = setInterval(() => {
+  //   fetchDocuments();
+  //   if (isOverlayOpen.value) {
+  //     fetchSelectedOrder();
+  //   }
+  // }, 1000);
 };
 
-const stopPolling = () => {
-  if (refreshInterval.value) {
-    clearInterval(refreshInterval.value);
-    refreshInterval.value = null;
-  }
-};
+// const stopPolling = () => {
+//   if (refreshInterval.value) {
+//     clearInterval(refreshInterval.value);
+//     refreshInterval.value = null;
+//   }
+// };
 // End of Refresh Interval
 
 //Timeline Script
@@ -129,31 +167,122 @@ const isAllowedRole = computed(() => {
 });
 
 const verifyDocument = async () => {
-  if (!selectedOrder.value) return;
+  if (!selectedOrder.value || !currentUser.value) return;
 
   try {
     const verificationTimestamp = new Date().toISOString();
+    let newStatus = selectedOrder.value.status;
+    let verificationType = "";
 
-    // Update in PocketBase with verification time
-    await pb.collection("Collection_1").update(selectedOrder.value.id, {
-      status: "Verified",
-      verifiedAt: verificationTimestamp,
-      updatedAt: verificationTimestamp
+    // Admin actions
+    if (currentUser.value.role === "admin") {
+      if (selectedOrder.value.status === "Pending") {
+        newStatus = "Needs Action";
+        verificationType = "initial";
+      } else if (selectedOrder.value.status === "Verified") {
+        // FINAL VERIFICATION - DOCUMENT COMPLETION
+        newStatus = "Completed";
+        verificationType = "final";
+
+        // 1. ALWAYS set completedAt with a fresh timestamp
+        const completionTimestamp = new Date().toISOString();
+        selectedOrder.value.completedAt = completionTimestamp;
+
+        // 2. Prepare update data with completion info
+        const updateData = {
+          status: "Completed",
+          verificationEvents: [
+            ...(selectedOrder.value.verificationEvents || []),
+            {
+              type: "final",
+              timestamp: completionTimestamp,
+              userId: currentUser.value.id,
+              userName: currentUser.value.name || currentUser.value.email,
+            },
+          ],
+          completedAt: completionTimestamp,
+          updatedAt: completionTimestamp,
+        };
+
+        // 3. Update in PocketBase
+        await pb
+          .collection("Collection_1")
+          .update(selectedOrder.value.id, updateData);
+
+        // 4. Update local state
+        selectedOrder.value.status = "Completed";
+        selectedOrder.value.verificationEvents = updateData.verificationEvents;
+        selectedOrder.value.updatedAt = completionTimestamp;
+
+        // 5. Update in documents array
+        const docIndex = documents.value.findIndex(
+          (doc) => doc.id === selectedOrder.value?.id
+        );
+        if (docIndex !== -1) {
+          documents.value[docIndex] = {
+            ...documents.value[docIndex],
+            ...updateData,
+          };
+        }
+
+        return; // Skip the rest of the function for completion
+      }
+    }
+    // Supplier actions (unchanged)
+    else if (currentUser.value.role === "supplier") {
+      if (selectedOrder.value.status === "Needs Action") {
+        newStatus = "Verified";
+        verificationType = "acknowledgement";
+      } else {
+        return;
+      }
+    }
+
+    // Original verification logic for non-completion cases
+    const verificationEvents = selectedOrder.value.verificationEvents || [];
+    verificationEvents.push({
+      type: verificationType,
+      timestamp: verificationTimestamp,
+      userId: currentUser.value.id,
+      userName: currentUser.value.name || currentUser.value.email,
     });
 
+    const updateData: any = {
+      status: newStatus,
+      verificationEvents: verificationEvents,
+      verifiedAt: verificationTimestamp,
+      verifiedBy: currentUser.value.id,
+      verifiedByName: currentUser.value.name || currentUser.value.email,
+      updatedAt: verificationTimestamp,
+    };
+
+    await pb
+      .collection("Collection_1")
+      .update(selectedOrder.value.id, updateData);
+
     // Update local state
-    selectedOrder.value.status = "Verified";
-    selectedOrder.value.verifiedAt = verificationTimestamp;
-    selectedOrder.value.updatedAt = verificationTimestamp;
+    Object.assign(selectedOrder.value, {
+      status: newStatus,
+      verificationEvents,
+      verifiedAt: verificationTimestamp,
+      verifiedBy: currentUser.value.id,
+      verifiedByName: currentUser.value.name || currentUser.value.email,
+      updatedAt: verificationTimestamp,
+    });
 
     // Update in documents array
     const docIndex = documents.value.findIndex(
       (doc) => doc.id === selectedOrder.value?.id
     );
     if (docIndex !== -1) {
-      documents.value[docIndex].status = "Verified";
-      documents.value[docIndex].verifiedAt = verificationTimestamp;
-      documents.value[docIndex].updatedAt = verificationTimestamp;
+      Object.assign(documents.value[docIndex], {
+        status: newStatus,
+        verificationEvents,
+        verifiedAt: verificationTimestamp,
+        verifiedBy: currentUser.value.id,
+        verifiedByName: currentUser.value.name || currentUser.value.email,
+        updatedAt: verificationTimestamp,
+      });
     }
   } catch (error) {
     console.error("Error verifying document:", error);
@@ -161,50 +290,99 @@ const verifyDocument = async () => {
   }
 };
 
-// Update your events computed property with proper type checking
+// Timeline Events Handler
 const events = computed(() => {
   if (!selectedOrder.value) return [];
 
-  const baseEvents = [
+  // 1. Create base events with document creation
+  const timelineEvents = [
     {
       title: "Document Created",
       description: "Document created",
-      time: selectedOrder.value.dateCreated,
+      time: formatTimestamp(selectedOrder.value.dateCreated),
     },
   ];
 
-  // Show verification event if status is Verified
-  if (selectedOrder.value.status === "Verified" && selectedOrder.value.verifiedAt) {
-    baseEvents.push({
-      title: "Document Verified",
-      description: "Document has been verified",
-      time: formatTimestamp(selectedOrder.value.verifiedAt),
+  // 2. Add verification events with improved type safety
+  if (selectedOrder.value.verificationEvents) {
+    selectedOrder.value.verificationEvents.forEach((event) => {
+      timelineEvents.push({
+        title: getVerificationTitle(event.type),
+        description: `Action by ${event.userName}`,
+        time: formatTimestamp(event.timestamp),
+      });
     });
   }
 
-  // Completion event - only show if completed
-  if (selectedOrder.value.status === "Completed" && selectedOrder.value.completedAt) {
-    baseEvents.push({
+  // 3. MANDATORY completion event (only if status is Completed)
+  if (selectedOrder.value.status === "Completed") {
+    timelineEvents.push({
       title: "Document Completed",
-      description: "All steps finished",
-      time: formatTimestamp(selectedOrder.value.completedAt),
+      description: "All verification steps completed",
+      // SAFE: completedAt is guaranteed to exist from Step 1 changes
+      time: formatTimestamp(selectedOrder.value.completedAt!),
     });
   }
 
-  return baseEvents;
+  return timelineEvents;
 });
+
+// Helper function for verification titles
+const getVerificationTitle = (type: string): string => {
+  const titleMap: Record<string, string> = {
+    initial: "Initial Verification",
+    acknowledgement: "Verification Acknowledged",
+    final: "Final Verification",
+  };
+  return titleMap[type] || "Verification Step";
+};
 
 // Helper function to consistently format timestamps
 const formatTimestamp = (timestamp: string) => {
-  return new Date(timestamp).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
+  return new Date(timestamp).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
   });
 };
+
+const completeDocument = async () => {
+  if (!selectedOrder.value) return;
+
+  // Validation - should never happen in normal flow
+  if (!selectedOrder.value.verifiedAt) {
+    alert("Document must be verified before completion");
+    return;
+  }
+
+  const completionTimestamp = new Date().toISOString();
+
+  try {
+    await pb.collection("Collection_1").update(selectedOrder.value.id, {
+      status: "Completed",
+      completedAt: completionTimestamp,
+      updatedAt: completionTimestamp,
+    });
+
+    // Update all relevant state
+    selectedOrder.value.status = "Completed";
+    selectedOrder.value.completedAt = completionTimestamp;
+
+    const docIndex = documents.value.findIndex(
+      (d) => d.id === selectedOrder.value?.id
+    );
+    if (docIndex !== -1) {
+      documents.value[docIndex].status = "Completed";
+      documents.value[docIndex].completedAt = completionTimestamp;
+    }
+  } catch (error) {
+    console.error("Completion failed:", error);
+  }
+};
+
 // End of Timeline Script
 
 // Store the user data
@@ -299,11 +477,13 @@ const fetchDocuments = async () => {
   try {
     const records = await pb.collection("Collection_1").getFullList({
       sort: "-created",
-      expand: "verifiedAt,completedAt,updatedAt", // Ensure these fields are included
+      expand:
+        "verifiedAt,completedAt,updatedAt,verifiedBy,verificationEvents.userId",
     });
 
     documents.value = records.map((record) => ({
       id: record.id,
+      completedAt: record.completedAt,
       orderNumber: `${record.Order_No}`,
       trackingId: record.trackingId,
       handledBy: record.handledBy,
@@ -317,9 +497,28 @@ const fetchDocuments = async () => {
       modeofProcurement: record.modeofProcurement,
       deliveryDate: record.deliveryDate,
       verifiedAt: record.verifiedAt, // Store verification timestamp
+      verifiedBy: record.verifiedBy,
+      verifiedByName:
+        record.expand?.verifiedBy?.name ||
+        record.expand?.verifiedBy?.email ||
+        "System",
       completedAt: record.completedAt, // Store completion timestamp
       updatedAt: record.updatedAt, // Store last updated timestamp
       fileType: "xlsx",
+
+      verificationEvents: record.verificationEvents?.map((event: any) => ({
+        type: event.type,
+        timestamp: event.timestamp,
+        userId: event.userId,
+        userName:
+          record.expand?.["verificationEvents.userId"]?.find(
+            (u: any) => u.id === event.userId
+          )?.name ||
+          record.expand?.["verificationEvents.userId"]?.find(
+            (u: any) => u.id === event.userId
+          )?.email ||
+          "Unknown",
+      })),
     }));
   } catch (error) {
     console.error("Error fetching documents:", error);
@@ -405,9 +604,9 @@ const openModal = async (order: Document) => {
   };
   isModalOpen.value = true;
 
-  if (!refreshInterval.value) {
-    startPolling();
-  }
+  // if (!refreshInterval.value) {
+  //   startPolling();
+  // }
 };
 
 const closeModal = () => {
@@ -591,18 +790,17 @@ const filteredDocuments = computed(() => {
     );
   }
 
-  // Filter Table Documents base on Active Button
+  // Filter by active button status
   if (activeButton.value === "Completed") {
     filtered = filtered.filter((doc) => doc.status === "Completed");
-  } else if (activeButton.value === "Document") {
-    filtered = filtered.filter((doc) => doc.status === "Document");
-  } else if (activeButton.value === "Lapsed") {
-    filtered = filtered.filter((doc) => doc.status === "Lapsed");
   } else if (activeButton.value === "Needs Action") {
     filtered = filtered.filter((doc) => doc.status === "Needs Action");
   } else if (activeButton.value === "Pending") {
     filtered = filtered.filter((doc) => doc.status === "Pending");
+  } else if (activeButton.value === "Verified") {
+    filtered = filtered.filter((doc) => doc.status === "Verified");
   }
+
   return filtered;
 });
 
@@ -625,7 +823,7 @@ const markAsCompleted = async () => {
     await pb.collection("Collection_1").update(selectedOrder.value.id, {
       status: "Completed",
       completedAt: completionTimestamp,
-      updatedAt: completionTimestamp
+      updatedAt: completionTimestamp,
     });
 
     // Update local state
@@ -679,9 +877,9 @@ onMounted(() => {
   startPolling();
 });
 
-onUnmounted(() => {
-  stopPolling();
-});
+// onUnmounted(() => {
+//   stopPolling();
+// });
 </script>
 
 <template>
@@ -1165,13 +1363,11 @@ onUnmounted(() => {
               <Timeline :value="events" align="left" class="left-timeline">
                 <template #content="slotProps">
                   <div class="timeline-item">
-                    <div class="timeline-title">{{ slotProps.item.title }}</div>
-                    <div class="timeline-description">
-                      {{ slotProps.item.description }}
-                    </div>
-                    <div v-if="slotProps.item.time" class="timeline-time">
-                      {{ slotProps.item.time }}
-                    </div>
+                    <strong>{{ slotProps.item.title }}</strong>
+                    <div>{{ slotProps.item.description }}</div>
+                    <small class="text-gray-500">{{
+                      slotProps.item.time
+                    }}</small>
                   </div>
                 </template>
               </Timeline>
@@ -1185,24 +1381,36 @@ onUnmounted(() => {
                 @click="verifyDocument"
                 class="px-4 py-2 bg-blue-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/50 active:scale-95 active:shadow-blue-500/75 active:bg-blue-700 mr-2"
               >
-                Verify Document
+                Initial Verify
               </button>
 
-              <!-- Mark as Completed Button (only for admins) -->
+              <!-- Supplier Verify Button (only shows when status is Needs Action) -->
+              <button
+                v-if="
+                  currentUser?.role === 'supplier' &&
+                  selectedOrder?.status === 'Needs Action'
+                "
+                @click="verifyDocument"
+                class="px-4 py-2 bg-purple-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-purple-600 hover:shadow-lg hover:shadow-purple-500/50 active:scale-95 active:shadow-purple-500/75 active:bg-purple-700 mr-2"
+              >
+                Acknowledge Verification
+              </button>
+
               <button
                 v-if="isAdmin && selectedOrder?.status === 'Verified'"
-                @click="markAsCompleted"
+                @click="verifyDocument"
                 class="px-4 py-2 bg-green-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-green-600 hover:shadow-lg hover:shadow-green-500/50 active:scale-95 active:shadow-green-500/75 active:bg-green-700"
               >
-                Mark as Completed
+                Final Verify & Complete
               </button>
 
-              <!-- Completion status (visible to all) -->
               <div
                 v-if="selectedOrder?.status === 'Completed'"
                 class="px-4 py-2 mt-4 bg-gray-200 text-gray-700 font-medium rounded-lg"
               >
-                ✓ Already Completed
+                ✓ Document Completed
+                <span v-if="selectedOrder.completedAt" class="text-xs block">
+                </span>
               </div>
             </div>
           </div>
