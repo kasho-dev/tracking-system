@@ -68,20 +68,30 @@ const fetchSelectedOrder = async () => {
     const record = await pb
       .collection("Collection_1")
       .getOne(selectedOrder.value.id, {
-        expand:
-          "verifiedAt,completedAt,updatedAt,verifiedBy,verificationEvents.userId",
+        expand: "verifiedBy,verificationEvents.userId",
       });
 
-    // ENSURE completedAt is never lost
+    // Ensure completedAt is preserved if it was set locally but not saved
     if (selectedOrder.value.status === "Completed" && !record.completedAt) {
       await pb.collection("Collection_1").update(selectedOrder.value.id, {
         completedAt: selectedOrder.value.completedAt,
       });
     }
 
+    // Normalize verification events with expanded user info
+    const verificationEvents = record.verificationEvents?.map((event: any) => {
+      const user = record.expand?.["verificationEvents.userId"]?.find(
+        (u: any) => u.id === event.userId
+      );
+
+      return {
+        ...event,
+        userName: user?.name || user?.email || "System",
+      };
+    });
+
     selectedOrder.value = {
       ...selectedOrder.value,
-      completedAt: record.completedAt || selectedOrder.value.completedAt,
       id: record.id,
       orderNumber: `${record.Order_No}`,
       trackingId: record.trackingId || "",
@@ -97,6 +107,7 @@ const fetchSelectedOrder = async () => {
       deliveryDate: record.deliveryDate
         ? new Date(record.deliveryDate).toLocaleDateString()
         : "",
+      completedAt: record.completedAt || selectedOrder.value.completedAt,
       verifiedAt: record.verifiedAt,
       verifiedBy: record.verifiedBy,
       verifiedByName:
@@ -104,24 +115,13 @@ const fetchSelectedOrder = async () => {
         record.expand?.verifiedBy?.email ||
         "System",
       updatedAt: record.updatedAt,
-      verificationEvents: record.verificationEvents?.map((event: any) => ({
-        type: event.type,
-        timestamp: event.timestamp,
-        userId: event.userId,
-        userName:
-          record.expand?.["verificationEvents.userId"]?.find(
-            (u: any) => u.id === event.userId
-          )?.name ||
-          record.expand?.["verificationEvents.userId"]?.find(
-            (u: any) => u.id === event.userId
-          )?.email ||
-          "Unknown",
-      })),
+      verificationEvents,
     };
   } catch (error) {
     console.error("Error refreshing selected order:", error);
   }
 };
+
 
 const startPolling = () => {
   // Fetch documents immediately
@@ -174,7 +174,11 @@ const verifyDocument = async () => {
     let newStatus = selectedOrder.value.status;
     let verificationType = "";
 
-    // Admin actions
+    const userInfo = {
+      userId: currentUser.value.id,
+      userName: currentUser.value.name || currentUser.value.email || "System",
+    };
+
     if (currentUser.value.role === "admin") {
       if (selectedOrder.value.status === "Pending") {
         newStatus = "Needs Action";
@@ -184,11 +188,8 @@ const verifyDocument = async () => {
         newStatus = "Completed";
         verificationType = "final";
 
-        // 1. ALWAYS set completedAt with a fresh timestamp
         const completionTimestamp = new Date().toISOString();
-        selectedOrder.value.completedAt = completionTimestamp;
 
-        // 2. Prepare update data with completion info
         const updateData = {
           status: "Completed",
           verificationEvents: [
@@ -196,40 +197,32 @@ const verifyDocument = async () => {
             {
               type: "final",
               timestamp: completionTimestamp,
-              userId: currentUser.value.id,
-              userName: currentUser.value.name || currentUser.value.email,
+              ...userInfo,
             },
           ],
           completedAt: completionTimestamp,
           updatedAt: completionTimestamp,
+          verifiedBy: userInfo.userId,
+          verifiedByName: userInfo.userName,
         };
 
-        // 3. Update in PocketBase
-        await pb
-          .collection("Collection_1")
-          .update(selectedOrder.value.id, updateData);
+        // Update backend
+        await pb.collection("Collection_1").update(selectedOrder.value.id, updateData);
 
-        // 4. Update local state
-        selectedOrder.value.status = "Completed";
-        selectedOrder.value.verificationEvents = updateData.verificationEvents;
-        selectedOrder.value.updatedAt = completionTimestamp;
+        // Update local state
+        Object.assign(selectedOrder.value, updateData);
 
-        // 5. Update in documents array
+        // Update in documents array
         const docIndex = documents.value.findIndex(
           (doc) => doc.id === selectedOrder.value?.id
         );
         if (docIndex !== -1) {
-          documents.value[docIndex] = {
-            ...documents.value[docIndex],
-            ...updateData,
-          };
+          Object.assign(documents.value[docIndex], updateData);
         }
 
-        return; // Skip the rest of the function for completion
+        return; // Skip rest of the function on completion
       }
-    }
-    // Supplier actions (unchanged)
-    else if (currentUser.value.role === "supplier") {
+    } else if (currentUser.value.role === "supplier") {
       if (selectedOrder.value.status === "Needs Action") {
         newStatus = "Verified";
         verificationType = "acknowledgement";
@@ -238,57 +231,41 @@ const verifyDocument = async () => {
       }
     }
 
-    // Original verification logic for non-completion cases
+    // For non-completion updates
     const verificationEvents = selectedOrder.value.verificationEvents || [];
     verificationEvents.push({
       type: verificationType,
       timestamp: verificationTimestamp,
-      userId: currentUser.value.id,
-      userName: currentUser.value.name || currentUser.value.email,
+      ...userInfo,
     });
 
-    const updateData: any = {
-      status: newStatus,
-      verificationEvents: verificationEvents,
-      verifiedAt: verificationTimestamp,
-      verifiedBy: currentUser.value.id,
-      verifiedByName: currentUser.value.name || currentUser.value.email,
-      updatedAt: verificationTimestamp,
-    };
-
-    await pb
-      .collection("Collection_1")
-      .update(selectedOrder.value.id, updateData);
-
-    // Update local state
-    Object.assign(selectedOrder.value, {
+    const updateData = {
       status: newStatus,
       verificationEvents,
       verifiedAt: verificationTimestamp,
-      verifiedBy: currentUser.value.id,
-      verifiedByName: currentUser.value.name || currentUser.value.email,
+      verifiedBy: userInfo.userId,
+      verifiedByName: userInfo.userName,
       updatedAt: verificationTimestamp,
-    });
+    };
+
+    await pb.collection("Collection_1").update(selectedOrder.value.id, updateData);
+
+    // Update local state
+    Object.assign(selectedOrder.value, updateData);
 
     // Update in documents array
     const docIndex = documents.value.findIndex(
       (doc) => doc.id === selectedOrder.value?.id
     );
     if (docIndex !== -1) {
-      Object.assign(documents.value[docIndex], {
-        status: newStatus,
-        verificationEvents,
-        verifiedAt: verificationTimestamp,
-        verifiedBy: currentUser.value.id,
-        verifiedByName: currentUser.value.name || currentUser.value.email,
-        updatedAt: verificationTimestamp,
-      });
+      Object.assign(documents.value[docIndex], updateData);
     }
   } catch (error) {
     console.error("Error verifying document:", error);
     alert("Failed to verify document. Please try again.");
   }
 };
+
 
 // Timeline Events Handler
 const events = computed(() => {
@@ -298,17 +275,17 @@ const events = computed(() => {
   const timelineEvents = [
     {
       title: "Document Created",
-      description: "Document created",
+      description: `Created by ${selectedOrder.value.createdBy || "System"}`,
       time: formatTimestamp(selectedOrder.value.dateCreated),
     },
   ];
 
-  // 2. Add verification events with improved type safety
+  // 2. Add verification events with user info
   if (selectedOrder.value.verificationEvents) {
     selectedOrder.value.verificationEvents.forEach((event) => {
       timelineEvents.push({
         title: getVerificationTitle(event.type),
-        description: `Action by ${event.userName}`,
+        description: `Action by ${event.userName || "Unknown"}`,
         time: formatTimestamp(event.timestamp),
       });
     });
@@ -316,16 +293,21 @@ const events = computed(() => {
 
   // 3. MANDATORY completion event (only if status is Completed)
   if (selectedOrder.value.status === "Completed") {
-    timelineEvents.push({
-      title: "Document Completed",
-      description: "All verification steps completed",
-      // SAFE: completedAt is guaranteed to exist from Step 1 changes
-      time: formatTimestamp(selectedOrder.value.completedAt!),
-    });
+    const completionTime = selectedOrder.value.completedAt || 
+      selectedOrder.value.verificationEvents?.find(e => e.type === "final")?.timestamp;
+    
+    if (completionTime) {
+      timelineEvents.push({
+        title: "Document Completed",
+        description: `Completed by ${selectedOrder.value.verifiedByName || "System"}`,
+        time: formatTimestamp(completionTime),
+      });
+    }
   }
 
   return timelineEvents;
 });
+
 
 // Helper function for verification titles
 const getVerificationTitle = (type: string): string => {
@@ -333,9 +315,11 @@ const getVerificationTitle = (type: string): string => {
     initial: "Initial Verification",
     acknowledgement: "Verification Acknowledged",
     final: "Final Verification",
+    completed: "Document Completed" // Added for completeness
   };
   return titleMap[type] || "Verification Step";
 };
+
 
 // Helper function to consistently format timestamps
 const formatTimestamp = (timestamp: string) => {
@@ -502,7 +486,6 @@ const fetchDocuments = async () => {
         record.expand?.verifiedBy?.name ||
         record.expand?.verifiedBy?.email ||
         "System",
-      completedAt: record.completedAt, // Store completion timestamp
       updatedAt: record.updatedAt, // Store last updated timestamp
       fileType: "xlsx",
 
