@@ -185,6 +185,7 @@ const verifyDocument = async () => {
 
   try {
     const verificationTimestamp = new Date().toISOString();
+    
     let newStatus = selectedOrder.value.status;
     let verificationType = "";
 
@@ -289,6 +290,8 @@ const verifyDocument = async () => {
 // Timeline Events Handler
 const events = computed(() => {
   if (!selectedOrder.value) return [];
+
+  
 
   // 1. Create base events with document creation
   const timelineEvents = [
@@ -483,7 +486,7 @@ const fetchDocuments = async () => {
     const records = await pb.collection("Collection_1").getFullList({
       sort: "-created",
       expand:
-        "verifiedAt,completedAt,updatedAt,verifiedBy,verificationEvents.userId",
+        "verifiedAt,completedAt,updatedAt,verifiedBy,verificationEvents.userId,createdBy",
     });
 
     documents.value = records.map((record) => ({
@@ -492,7 +495,8 @@ const fetchDocuments = async () => {
       orderNumber: `${record.Order_No}`,
       trackingId: record.trackingId,
       handledBy: record.handledBy,
-      createdBy: record.createdBy,
+      createdBy: record.expand?.createdBy?.name || record.createdBy || "System",
+      createdByName: record.expand?.createdBy?.name,
       dateCreated: new Date(record.created).toLocaleString(),
       created: record.created,
       status: record.status,
@@ -1378,7 +1382,7 @@ onMounted(() => {
               </td>
 
               <!-- Order # Cell -->
-              <td class="p-3 text-left">
+              <td class="p-3 text-left wrap-text" >
                 <a
                   href="#"
                   class="text-blue-600 hover:underline"
@@ -1390,10 +1394,10 @@ onMounted(() => {
               </td>
 
               <!-- Handled By Cell -->
-              <td class="p-3 text-left">{{ doc.handledBy }}</td>
+              <td class="p-3 text-left wrap-text">{{ doc.handledBy }}</td>
 
               <!-- Created By Cell -->
-              <td class="p-3 text-left">{{ doc.createdBy }}</td>
+              <td class="p-3 text-left wrap-text">{{ doc.createdBy }}</td>
 
               <!-- Date Created Cell -->
               <td class="p-3 text-left">{{ doc.dateCreated }}</td>
