@@ -1595,7 +1595,7 @@ onMounted(() => {
               </div>
 
               <!-- Supplier Information -->
-              <div class="mt-6 border-t pt-4">
+              <div class="mt-6 border-t pt-4" v-if="selectedOrder">
                 <div class="flex justify-between items-center mb-2">
                   <h3 class="font-semibold">Supplier Information:</h3>
                   <button
