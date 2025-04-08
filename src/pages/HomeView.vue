@@ -738,12 +738,25 @@ const isModalOpen = ref(false);
 const openModal = async (order: Document) => {
   isOverlayOpen.value = true;
   selectedOrder.value = {
-    ...order,
+    id: order.id,
+    orderNumber: order.orderNumber,
+    trackingId: order.trackingId,
+    handledBy: order.handledBy,
+    createdBy: order.createdBy,
+    dateCreated: order.dateCreated,
+    status: order.status,
+    supplierName: order.supplierName,
+    address: order.address,
+    tin_ID: order.tin_ID,
+    modeofProcurement: order.modeofProcurement,
     deliveryDate: order.deliveryDate
       ? new Date(order.deliveryDate).toLocaleDateString()
       : "",
-    verifiedAt: order.verifiedAt, // Ensure this is passed
-    completedAt: order.completedAt, // Ensure this is passed
+    verifiedAt: order.verifiedAt,
+    completedAt: order.completedAt,
+    verificationEvents: order.verificationEvents || [],
+    fileType: order.fileType || "xlsx",
+    updatedAt: order.updatedAt
   };
   isModalOpen.value = true;
 
@@ -757,6 +770,8 @@ const closeModal = () => {
   isModalOpen.value = false;
   selectedOrder.value = null;
 };
+
+
 
 //Documents Data
 const documents = ref<Document[]>([]);
@@ -1505,50 +1520,6 @@ onMounted(() => {
         </table>
       </div>
     </div>
-    <div
-      class="border border-t-0 rounded-b-lg overflow-auto w-full max-h-[450px]"
-    >
-      <table class="w-full border-collapse bg-white">
-        <tbody>
-          <tr
-            v-for="doc in sortedDocuments"
-            :key="doc.id"
-            class="border-b hover:bg-gray-200 text-sm"
-          >
-            <!-- Checkbox Cell -->
-            <td class="p-3 text-left">
-              <input
-                type="checkbox"
-                class="w-10 h-4"
-                :value="doc.id"
-                v-model="selectedDocuments"
-              />
-            </td>
-
-            <!-- Order # Cell -->
-            <td class="p-3 text-left wrap-text">
-              <a
-                href="#"
-                class="text-blue-600 hover:underline"
-                @click.prevent="openModal(doc)"
-              >
-                {{ doc.orderNumber }}
-              </a>
-              <div class="text-xs text-gray-500">{{ doc.trackingId }}</div>
-            </td>
-
-            <!-- Handled By Cell -->
-            <td class="p-3 text-left">{{ doc.handledBy }}</td>
-
-            <!-- Created By Cell -->
-            <td class="p-3 text-left">{{ doc.createdBy }}</td>
-
-            <!-- Date Created Cell -->
-            <td class="p-3 text-left">{{ doc.dateCreated }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
 
     <!-- Overlay -->
     <Transition
@@ -1855,7 +1826,7 @@ th:first-child,
 td:first-child {
   width: 100px; /* Fixed width for checkbox column */
   padding-left: px; /* Consistent padding */
-  vertical-align: top; /* Changed from left to top for better text wrapping */
+  vertical-align: left; 
   border-bottom: 1px solid #e5e7eb;
   word-wrap: break-word; /* Ensure long words break */
   overflow: hidden; /* Hide overflow */
@@ -1874,35 +1845,10 @@ tr:hover td {
   background-color: #f9fafb;
 } */
 
-/* Example of setting column widths */
-th:nth-child(2),
-td:nth-child(2) {
-  width: 25%;
-} /* Order # */
-th:nth-child(3),
-td:nth-child(3) {
-  width: 25%;
-} /* Handled by */
-th:nth-child(4),
-td:nth-child(4) {
-  width: 25%;
-} /* Created by */
-th:nth-child(2),
-td:nth-child(2) {
-  width: 25%;
-} /* Order # */
-th:nth-child(3),
-td:nth-child(3) {
-  width: 25%;
-} /* Handled by */
-th:nth-child(4),
-td:nth-child(4) {
-  width: 25%;
-} /* Created by */
-th:nth-child(4),
-td:nth-child(4) {
-  width: 20%;
-} /* Date Created */
+th:nth-child(2), td:nth-child(2) { width: 25%; }  /* Order # */
+th:nth-child(3), td:nth-child(3) { width: 25%; }  /* Handled by */
+th:nth-child(4), td:nth-child(4) { width: 25%; }  /* Created by */
+th:nth-child(4), td:nth-child(4) { width: 20%; }  /* Date Created */
 
 /* etc */
 
