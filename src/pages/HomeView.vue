@@ -178,59 +178,63 @@ const verifyDocument = async () => {
       userName: currentUser.value.name || currentUser.value.email || "System",
     };
 
-    if (currentUser.value.role === "admin") {
-      if (selectedOrder.value.status === "Pending") {
-        newStatus = "Needs Action";
-        verificationType = "initial";
-      } else if (selectedOrder.value.status === "Verified") {
-        // FINAL VERIFICATION - DOCUMENT COMPLETION
-        newStatus = "Completed";
-        verificationType = "final";
+    // ADMIN HANDLES ALL VERIFICATION STEPS
+    if (selectedOrder.value.status === "Pending") {
+      // INITIAL VERIFICATION
+      newStatus = "Needs Action";
+      verificationType = "initial";
+    } else if (selectedOrder.value.status === "Needs Action") {
+      // SENT TO SUPPLIER (simulated by admin)
+      newStatus = "Verified";
+      verificationType = "sent to supplier";
+    } else if (selectedOrder.value.status === "Verified") {
+      // FINAL VERIFICATION - DOCUMENT COMPLETION
+      newStatus = "Completed";
+      verificationType = "final";
 
-        const completionTimestamp = new Date().toISOString();
+      const completionTimestamp = new Date().toISOString();
 
-        const updateData = {
-          status: "Completed",
-          verificationEvents: [
-            ...(selectedOrder.value.verificationEvents || []),
-            {
-              type: "final",
-              timestamp: completionTimestamp,
-              ...userInfo,
-            },
-          ],
-          completedAt: completionTimestamp,
-          updatedAt: completionTimestamp,
-          verifiedBy: userInfo.userId,
-          verifiedByName: userInfo.userName,
-        };
+      const updateData = {
+        status: "Completed",
+        verificationEvents: [
+          ...(selectedOrder.value.verificationEvents || []),
+          {
+            type: "final",
+            timestamp: verificationTimestamp,
+            ...userInfo,
+          },
+        ],
+        completedAt: verificationTimestamp,
+        updatedAt: verificationTimestamp,
+        verifiedBy: userInfo.userId,
+        verifiedByName: userInfo.userName,
+      };
 
-        // Update backend
-        await pb
-          .collection("Collection_1")
-          .update(selectedOrder.value.id, updateData);
+      // Update backend
+      await pb
+        .collection("Collection_1")
+        .update(selectedOrder.value.id, updateData);
 
-        // Update local state
-        Object.assign(selectedOrder.value, updateData);
+      Object.assign(selectedOrder.value, updateData);
 
-        // Update in documents array
-        const docIndex = documents.value.findIndex(
-          (doc) => doc.id === selectedOrder.value?.id
-        );
-        if (docIndex !== -1) {
-          Object.assign(documents.value[docIndex], updateData);
-        }
-
-        return; // Skip rest of the function on completion
+      const docIndex = documents.value.findIndex(
+        (doc) => doc.id === selectedOrder.value?.id
+      );
+      if (docIndex !== -1) {
+        Object.assign(documents.value[docIndex], updateData);
       }
-    } else if (currentUser.value.role === "supplier") {
-      if (selectedOrder.value.status === "Needs Action") {
-        newStatus = "Verified";
-        verificationType = "acknowledgement";
-      } else {
-        return;
-      }
+
+      return;
     }
+
+    // } else if (currentUser.value.role === "supplier") {
+    //   if (selectedOrder.value.status === "Needs Action") {
+    //     newStatus = "Verified";
+    //     verificationType = "acknowledgement";
+    //   } else {
+    //     return;
+    //   }
+    // }
 
     // For non-completion updates
     const verificationEvents = selectedOrder.value.verificationEvents || [];
@@ -253,10 +257,8 @@ const verifyDocument = async () => {
       .collection("Collection_1")
       .update(selectedOrder.value.id, updateData);
 
-    // Update local state
     Object.assign(selectedOrder.value, updateData);
 
-    // Update in documents array
     const docIndex = documents.value.findIndex(
       (doc) => doc.id === selectedOrder.value?.id
     );
@@ -318,9 +320,9 @@ const events = computed(() => {
 const getVerificationTitle = (type: string): string => {
   const titleMap: Record<string, string> = {
     initial: "Initial Verification",
-    acknowledgement: "Verification Acknowledged",
+    "sent to supplier": "Sent to Supplier",
     final: "Final Verification",
-    completed: "Document Completed", // Added for completeness
+    completed: "Document Completed",
   };
   return titleMap[type] || "Verification Step";
 };
@@ -726,8 +728,13 @@ const documentsToDelete = ref<string[]>([]);
 
 // Open confirmation overlay
 const confirmDelete = () => {
+  if (currentUser.value?.role === "user") {
+    alert("You don't have permission to delete documents.");
+    return;
+  }
+
   if (selectedDocuments.value.length > 0) {
-    documentsToDelete.value = [...selectedDocuments.value]; // Store selected IDs
+    documentsToDelete.value = [...selectedDocuments.value];
     showDeleteConfirmation.value = true;
   } else {
     alert("Please select at least one document to delete.");
@@ -741,28 +748,28 @@ const closeDeletePopup = () => {
 
 // Perform deletion and close popup
 const deleteSelectedDocuments = async () => {
+  if (currentUser.value?.role === "user") {
+    alert("You don't have permission to delete documents.");
+    return;
+  }
+
   if (selectedDocuments.value.length === 0) {
     alert("No documents selected for deletion.");
     return;
   }
 
   try {
-    // Delete each selected document from PocketBase
     const deletePromises = documentsToDelete.value.map((id) =>
       pb.collection("Collection_1").delete(id)
     );
 
     await Promise.all(deletePromises);
 
-    // Update local state after successful deletion
     documents.value = documents.value.filter(
       (doc) => !documentsToDelete.value.includes(doc.id)
     );
 
-    // Reset the selected documents and selectAll state
     selectedDocuments.value = [];
-    // selectAll.value = false;
-
     showDeleteConfirmation.value = false;
 
     console.log("Successfully deleted documents:", documentsToDelete.value);
@@ -808,7 +815,6 @@ const filteredDocuments = computed(() => {
 
   return filtered;
 });
-
 
 // Computed property: Count documents by status
 const statusCounts = computed(() => {
@@ -1147,6 +1153,11 @@ onMounted(() => {
         <button
           class="p-2 bg-gray-100 rounded hover:bg-red-500 transition"
           @click="confirmDelete"
+          :disabled="currentUser?.role === 'user'"
+          :class="{
+            'opacity-50 cursor-not-allowed': currentUser?.role === 'user',
+            'hover:bg-red-500': currentUser?.role !== 'user',
+          }"
         >
           <Trash />
         </button>
@@ -1404,7 +1415,7 @@ onMounted(() => {
 
             <!-- Overlay Timeline Action Buttons -->
             <div class="mt-4">
-              <!-- Verify Document Button (only for admins) -->
+              <!-- Initial Verification (Admin only) -->
               <button
                 v-if="isAdmin && selectedOrder?.status === 'Pending'"
                 @click="verifyDocument"
@@ -1412,25 +1423,22 @@ onMounted(() => {
               >
                 Initial Verify
               </button>
-
-              <!-- Supplier Verify Button (only shows when status is Needs Action) -->
+              <!-- Sent to Supplier (Admin only) -->
               <button
-                v-if="
-                  currentUser?.role === 'supplier' &&
-                  selectedOrder?.status === 'Needs Action'
-                "
+                v-if="isAdmin && selectedOrder?.status === 'Needs Action'"
                 @click="verifyDocument"
                 class="px-4 py-2 bg-purple-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-purple-600 hover:shadow-lg hover:shadow-purple-500/50 active:scale-95 active:shadow-purple-500/75 active:bg-purple-700 mr-2"
               >
-                Acknowledge Verification
+                Mark as Sent to Supplier
               </button>
 
+              <!-- Final Verification (Admin only) -->
               <button
                 v-if="isAdmin && selectedOrder?.status === 'Verified'"
                 @click="verifyDocument"
                 class="px-4 py-2 bg-green-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-green-600 hover:shadow-lg hover:shadow-green-500/50 active:scale-95 active:shadow-green-500/75 active:bg-green-700"
               >
-                Final Verify & Complete
+                Mark as Recieved & Verified
               </button>
 
               <div
@@ -1438,8 +1446,6 @@ onMounted(() => {
                 class="px-4 py-2 mt-4 bg-gray-200 text-gray-700 font-medium rounded-lg"
               >
                 ✓ Document Completed
-                <span v-if="selectedOrder.completedAt" class="text-xs block">
-                </span>
               </div>
             </div>
           </div>
@@ -1472,6 +1478,11 @@ onMounted(() => {
           <button
             @click="deleteSelectedDocuments"
             class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition"
+            :disabled="currentUser?.role === 'user'"
+            :class="{
+              'opacity-50 cursor-not-allowed': currentUser?.role === 'user',
+              'hover:bg-red-700': currentUser?.role !== 'user',
+            }"
           >
             Delete
           </button>
