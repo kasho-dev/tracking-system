@@ -60,10 +60,8 @@ const showProcurementError = ref(false);
 const showDeliveryDateError = ref(false);
 const poNumberCharCount = computed(() => poNumber.value.length);
 
-
 ///////////////////////////////// In your script
- // Repeat for other required fields
-
+// Repeat for other required fields
 
 /////////////////////////////
 
@@ -225,7 +223,7 @@ const verifyDocument = async () => {
 
   try {
     const verificationTimestamp = new Date().toISOString();
-    
+
     let newStatus = selectedOrder.value.status;
     let verificationType = "";
 
@@ -330,8 +328,6 @@ const verifyDocument = async () => {
 // Timeline Events Handler
 const events = computed(() => {
   if (!selectedOrder.value) return [];
-
-  
 
   // 1. Create base events with document creation
   const timelineEvents = [
@@ -520,7 +516,8 @@ const openEditModal = (order: Document) => {
     ? formatDateForInput(order.deliveryDate)
     : "";
   showModal.value = true;
-  isOverlayMinimized.value = true; // Minimize overlay when edit starts
+  isOverlayMinimized.value = false; // Minimize overlay when edit starts
+  isModalOpen.value = false; // Close the main overlay when editing
 };
 
 const formatDateForInput = (dateString: string) => {
@@ -1061,7 +1058,9 @@ onMounted(() => {
 <template>
   <body class="bg-[#0A0E1A] flex flex-grow p-4">
     <!-- Add PO Document Button -->
-    <div class="sidebar w-64 bg-[#0A0E1A] text-white mr-4 rounded-lg">
+    <div
+      class="sidebar w-64 bg-[#0A0E1A] text-white mr-4 rounded-lg"
+    >
       <button
         @click="openModalAdd"
         class="w-full flex items-center justify-center gap-2 bg-[#6A5CFE] text-white text-sm font-semibold py-3 rounded-xl hover:bg-[#7C6CFF] active:bg-[#5A4BD9] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 ease-out"
@@ -1121,44 +1120,44 @@ onMounted(() => {
               </h2>
 
               <div class="space-y-4">
-  <!-- PO Number Field (Required + 50 char limit) -->
-  <div>
-    <label class="block text-gray-400 text-sm mb-1">
-      Work Order # <span class="text-red-500">*</span>
-    </label>
-    <input
-      v-model="poNumber"
-      type="text"
-      placeholder="eg. APO2025-2024"
-      maxlength="50"
-      required
-      class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-      :class="{ 'border-red-500': showPONumberError }"
-    />
-    <p v-if="showPONumberError" class="text-red-500 text-xs mt-1">
-      PO Number is required (max 50 characters)
-    </p>
-    <p class="text-gray-500 text-xs mt-1">
-      {{ poNumber.length }}/50 characters
-    </p>
-  </div>
+                <!-- PO Number Field (Required + 50 char limit) -->
+                <div>
+                  <label class="block text-gray-400 text-sm mb-1">
+                    Work Order # <span class="text-red-500">*</span>
+                  </label>
+                  <input
+                    v-model="poNumber"
+                    type="text"
+                    placeholder="eg. APO2025-2024"
+                    maxlength="50"
+                    required
+                    class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    :class="{ 'border-red-500': showPONumberError }"
+                  />
+                  <p v-if="showPONumberError" class="text-red-500 text-xs mt-1">
+                    PO Number is required (max 50 characters)
+                  </p>
+                  <p class="text-gray-500 text-xs mt-1">
+                    {{ poNumber.length }}/50 characters
+                  </p>
+                </div>
 
-  <div>
-  <label class="block text-gray-400 text-sm mb-1">
-    Supplier Name <span class="text-red-500">*</span>
-  </label>
-  <input
-    v-model="supplierName"
-    type="text"
-    placeholder="John Pork"
-    required
-    class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-    :class="{ 'border-red-500': showSupplierError }"
-  />
-  <p v-if="showSupplierError" class="text-red-500 text-xs mt-1">
-    Supplier Name is required
-  </p>
-</div>
+                <div>
+                  <label class="block text-gray-400 text-sm mb-1">
+                    Supplier Name <span class="text-red-500">*</span>
+                  </label>
+                  <input
+                    v-model="supplierName"
+                    type="text"
+                    placeholder="John Pork"
+                    required
+                    class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    :class="{ 'border-red-500': showSupplierError }"
+                  />
+                  <p v-if="showSupplierError" class="text-red-500 text-xs mt-1">
+                    Supplier Name is required
+                  </p>
+                </div>
 
                 <!-- Address -->
                 <div>
@@ -1170,46 +1169,47 @@ onMounted(() => {
                     type="text"
                     placeholder="Legazpi City, Albay"
                     class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  
-                  :class="{ 'border-red-500': showSupplierError }"
-  />
-  <p v-if="showSupplierError" class="text-red-500 text-xs mt-1">
-    Address is required
-  </p>
+                    :class="{ 'border-red-500': showSupplierError }"
+                  />
+                  <p v-if="showSupplierError" class="text-red-500 text-xs mt-1">
+                    Address is required
+                  </p>
                 </div>
 
                 <!-- TIN ID -->
                 <div>
-                  <label class="block text-gray-400 text-sm mb-1">TIN ID<span class="text-red-500">*</span></label>
+                  <label class="block text-gray-400 text-sm mb-1"
+                    >TIN ID<span class="text-red-500">*</span></label
+                  >
                   <input
                     v-model="tin_ID"
                     type="text"
                     placeholder="716-412-421 VAT"
                     class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  
-                  :class="{ 'border-red-500': showSupplierError }"
-  />
-  <p v-if="showSupplierError" class="text-red-500 text-xs mt-1">
-    TIN ID is required
-  </p>
+                    :class="{ 'border-red-500': showSupplierError }"
+                  />
+                  <p v-if="showSupplierError" class="text-red-500 text-xs mt-1">
+                    TIN ID is required
+                  </p>
                 </div>
 
                 <!-- Mode of Procurement -->
                 <div>
                   <label class="block text-gray-400 text-sm mb-1"
-                    >Mode of Procurement<span class="text-red-500">*</span></label
+                    >Mode of Procurement<span class="text-red-500"
+                      >*</span
+                    ></label
                   >
                   <input
                     v-model="modeofProcurement"
                     type="text"
                     placeholder="Small Value Procurement"
                     class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  
-                  :class="{ 'border-red-500': showSupplierError }"
-  />
-  <p v-if="showSupplierError" class="text-red-500 text-xs mt-1">
-    Mode of Procurement is required
-  </p>
+                    :class="{ 'border-red-500': showSupplierError }"
+                  />
+                  <p v-if="showSupplierError" class="text-red-500 text-xs mt-1">
+                    Mode of Procurement is required
+                  </p>
                 </div>
 
                 <!-- Delivery Date -->
@@ -1221,13 +1221,11 @@ onMounted(() => {
                     v-model="deliveryDate"
                     type="datetime-local"
                     class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                
-
-                  :class="{ 'border-red-500': showSupplierError }"
-  />
-  <p v-if="showSupplierError" class="text-red-500 text-xs mt-1">
-    Delivery date is required
-  </p>
+                    :class="{ 'border-red-500': showSupplierError }"
+                  />
+                  <p v-if="showSupplierError" class="text-red-500 text-xs mt-1">
+                    Delivery date is required
+                  </p>
                 </div>
               </div>
 
@@ -1262,10 +1260,10 @@ onMounted(() => {
               : 'text-purple-400 hover:bg-[#2E3347]'
           "
         >
-        <span class="flex items-center gap-2 sidebar-button-content">
-  <File />
-  <span class="sidebar-button-text">Documents</span>
-</span>
+          <span class="flex items-center gap-2 sidebar-button-content">
+            <File />
+            <span class="sidebar-button-text">Documents</span>
+          </span>
           <span class="text-white">{{ documents.length }}</span>
         </div>
 
@@ -1483,7 +1481,7 @@ onMounted(() => {
               </td>
 
               <!-- Order # Cell -->
-              <td class="p-3 text-left wrap-text" >
+              <td class="p-3 text-left wrap-text">
                 <a
                   href="#"
                   class="text-blue-600 hover:underline"
@@ -1507,41 +1505,50 @@ onMounted(() => {
         </table>
       </div>
     </div>
-<div class="border border-t-0 rounded-b-lg overflow-auto w-full max-h-[450px]">
-  <table class="w-full border-collapse bg-white">
-    <tbody>
-      <tr v-for="doc in sortedDocuments" :key="doc.id" class="border-b hover:bg-gray-200 text-sm">
-        <!-- Checkbox Cell -->
-        <td class="p-3 text-left">
-          <input
-            type="checkbox"
-            class="w-10 h-4"
-            :value="doc.id"
-            v-model="selectedDocuments"
-          />
-        </td>
-        
-        <!-- Order # Cell -->
-        <td class="p-3 text-left wrap-text">
-          <a href="#" class="text-blue-600 hover:underline" @click.prevent="openModal(doc)">
-            {{ doc.orderNumber }}
-          </a>
-          <div class="text-xs text-gray-500">{{ doc.trackingId }}</div>
-        </td>
-        
-        <!-- Handled By Cell -->
-        <td class="p-3 text-left">{{ doc.handledBy }}</td>
-        
-        <!-- Created By Cell -->
-        <td class="p-3 text-left">{{ doc.createdBy }}</td>
-        
-        <!-- Date Created Cell -->
-        <td class="p-3 text-left">{{ doc.dateCreated }}</td>
-      </tr>
-    </tbody>
-  </table>
-</div>
+    <div
+      class="border border-t-0 rounded-b-lg overflow-auto w-full max-h-[450px]"
+    >
+      <table class="w-full border-collapse bg-white">
+        <tbody>
+          <tr
+            v-for="doc in sortedDocuments"
+            :key="doc.id"
+            class="border-b hover:bg-gray-200 text-sm"
+          >
+            <!-- Checkbox Cell -->
+            <td class="p-3 text-left">
+              <input
+                type="checkbox"
+                class="w-10 h-4"
+                :value="doc.id"
+                v-model="selectedDocuments"
+              />
+            </td>
 
+            <!-- Order # Cell -->
+            <td class="p-3 text-left wrap-text">
+              <a
+                href="#"
+                class="text-blue-600 hover:underline"
+                @click.prevent="openModal(doc)"
+              >
+                {{ doc.orderNumber }}
+              </a>
+              <div class="text-xs text-gray-500">{{ doc.trackingId }}</div>
+            </td>
+
+            <!-- Handled By Cell -->
+            <td class="p-3 text-left">{{ doc.handledBy }}</td>
+
+            <!-- Created By Cell -->
+            <td class="p-3 text-left">{{ doc.createdBy }}</td>
+
+            <!-- Date Created Cell -->
+            <td class="p-3 text-left">{{ doc.dateCreated }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
     <!-- Overlay -->
     <Transition
@@ -1854,8 +1861,8 @@ td:first-child {
   overflow: hidden; /* Hide overflow */
 }
 
-
-th:first-child, td:first-child {
+th:first-child,
+td:first-child {
   width: 100px; /* Reduced width for checkbox */
   padding-left: 12px;
   padding-right: 0;
@@ -1880,10 +1887,22 @@ th:nth-child(4),
 td:nth-child(4) {
   width: 25%;
 } /* Created by */
-th:nth-child(2), td:nth-child(2) { width: 25%; }  /* Order # */
-th:nth-child(3), td:nth-child(3) { width: 25%; }  /* Handled by */
-th:nth-child(4), td:nth-child(4) { width: 25%; }  /* Created by */
-th:nth-child(4), td:nth-child(4) { width: 20%; }  /* Date Created */
+th:nth-child(2),
+td:nth-child(2) {
+  width: 25%;
+} /* Order # */
+th:nth-child(3),
+td:nth-child(3) {
+  width: 25%;
+} /* Handled by */
+th:nth-child(4),
+td:nth-child(4) {
+  width: 25%;
+} /* Created by */
+th:nth-child(4),
+td:nth-child(4) {
+  width: 20%;
+} /* Date Created */
 
 /* etc */
 
