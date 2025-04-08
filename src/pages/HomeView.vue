@@ -60,6 +60,7 @@ const searchStore = useSearchStore(); // ✅ Initialize store
 // Refresh Table Every Second
 // const refreshInterval = ref<ReturnType<typeof setInterval> | null>(null);
 const isOverlayOpen = ref(false);
+const isOverlayMinimized = ref(false);
 
 const fetchSelectedOrder = async () => {
   if (!selectedOrder.value) return;
@@ -149,6 +150,45 @@ const startPolling = () => {
 // End of Refresh Interval
 
 //Timeline Script
+
+const editSupplierInfo = async () => {
+  if (!selectedOrder.value) return;
+
+  try {
+    // Prepare the update data
+    const updateData = {
+      supplierName: selectedOrder.value.supplierName,
+      address: selectedOrder.value.address,
+      tin_ID: selectedOrder.value.tin_ID,
+      modeofProcurement: selectedOrder.value.modeofProcurement,
+      deliveryDate: selectedOrder.value.deliveryDate,
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Update in PocketBase
+    await pb
+      .collection("Collection_1")
+      .update(selectedOrder.value.id, updateData);
+
+    // Update local state
+    const docIndex = documents.value.findIndex(
+      (doc) => doc.id === selectedOrder.value?.id
+    );
+    if (docIndex !== -1) {
+      documents.value[docIndex] = {
+        ...documents.value[docIndex],
+        ...updateData,
+      };
+    }
+
+    // Show success feedback
+    alert("Supplier information updated successfully!");
+  } catch (error) {
+    console.error("Error updating supplier information:", error);
+    alert("Failed to update supplier information. Please try again.");
+  }
+};
+
 // const verificationTime = ref<string | null>(null);
 // const timelineEvents = ref<
 //   Array<{
@@ -447,6 +487,29 @@ const tin_ID = ref(""); // Changed from tin_id
 const modeofProcurement = ref(""); // Changed from procurementMode
 const deliveryDate = ref("");
 
+const isEditMode = ref(false);
+const currentEditingId = ref<string | null>(null);
+
+const openEditModal = (order: Document) => {
+  isEditMode.value = true;
+  currentEditingId.value = order.id;
+  poNumber.value = order.orderNumber;
+  supplierName.value = order.supplierName;
+  address.value = order.address;
+  tin_ID.value = order.tin_ID;
+  modeofProcurement.value = order.modeofProcurement;
+  deliveryDate.value = order.deliveryDate
+    ? formatDateForInput(order.deliveryDate)
+    : "";
+  showModal.value = true;
+  isOverlayMinimized.value = true; // Minimize overlay when edit starts
+};
+
+const formatDateForInput = (dateString: string) => {
+  const date = new Date(dateString);
+  return date.toISOString().slice(0, 16);
+};
+
 // Add PO Document Modal
 const openModalAdd = () => {
   showModal.value = true;
@@ -454,12 +517,15 @@ const openModalAdd = () => {
 
 const closeModalAdd = () => {
   showModal.value = false;
-  poNumber.value = ""; // Reset input field when closed
-  supplierName.value = ""; // Reset input field when closed
-  address.value = ""; // Reset input field when closed
-  tin_ID.value = ""; // Reset input field when closed
-  modeofProcurement.value = ""; // Reset input field when closed
-  deliveryDate.value = ""; // Reset input field when closed
+  isEditMode.value = false;
+  currentEditingId.value = null;
+  poNumber.value = "";
+  supplierName.value = "";
+  address.value = "";
+  tin_ID.value = "";
+  modeofProcurement.value = "";
+  deliveryDate.value = "";
+  isOverlayMinimized.value = false; // Restore overlay when canceling
 };
 
 // Code block for fetching data from PocketBase
@@ -525,46 +591,78 @@ const submitPO = async () => {
   const formattedDeliveryDate = deliveryDate.value
     ? new Date(deliveryDate.value).toISOString()
     : "";
-
   const data = {
     Order_No: poNumber.value,
-    trackingId: `seq${Math.floor(Math.random() * 1000000)}`,
-    handledBy: "System",
-    createdBy: "Admin",
-    status: "Pending",
     supplierName: supplierName.value,
     address: address.value,
     tin_ID: tin_ID.value,
     modeofProcurement: modeofProcurement.value,
-    deliveryDate: formattedDeliveryDate, // Use the formatted date
+    deliveryDate: formattedDeliveryDate,
+    updatedAt: new Date().toISOString(),
   };
-
   try {
-    const record = await pb.collection("Collection_1").create(data);
+    if (isEditMode.value && currentEditingId.value) {
+      const record = await pb
+        .collection("Collection_1")
+        .update(currentEditingId.value, data);
+      const docIndex = documents.value.findIndex(
+        (doc) => doc.id === currentEditingId.value
+      );
+      if (docIndex !== -1) {
+        documents.value[docIndex] = {
+          ...documents.value[docIndex],
+          ...data,
+          deliveryDate: formattedDeliveryDate
+            ? new Date(formattedDeliveryDate).toLocaleDateString()
+            : "",
+        };
+      }
+      if (selectedOrder.value?.id === currentEditingId.value) {
+        selectedOrder.value = {
+          ...selectedOrder.value,
+          ...data,
+          deliveryDate: formattedDeliveryDate
+            ? new Date(formattedDeliveryDate).toLocaleDateString()
+            : "",
+        };
+      }
+    } else {
+      // Create new document (existing code)
+      const record = await pb.collection("Collection_1").create({
+        ...data,
+        trackingId: `seq${Math.floor(Math.random() * 1000000)}`,
+        handledBy: "System",
+        createdBy: "Admin",
+        status: "Pending",
+      });
 
-    documents.value.push({
-      id: record.id,
-      orderNumber: `${record.Order_No}`,
-      trackingId: record.trackingId,
-      handledBy: record.handledBy,
-      createdBy: record.createdBy,
-      dateCreated: new Date(record.created).toLocaleString(),
-      status: record.status,
-      fileType: "xlsx",
-      supplierName: record.supplierName,
-      address: record.address,
-      tin_ID: record.tin_ID,
-      modeofProcurement: record.modeofProcurement,
-      deliveryDate: record.deliveryDate
-        ? new Date(record.deliveryDate).toLocaleDateString()
-        : "",
-    });
+      documents.value.push({
+        id: record.id,
+        orderNumber: `${record.Order_No}`,
+        trackingId: record.trackingId,
+        handledBy: record.handledBy,
+        createdBy: record.createdBy,
+        dateCreated: new Date(record.created).toLocaleString(),
+        status: record.status,
+        fileType: "xlsx",
+        supplierName: record.supplierName,
+        address: record.address,
+        tin_ID: record.tin_ID,
+        modeofProcurement: record.modeofProcurement,
+        deliveryDate: record.deliveryDate
+          ? new Date(record.deliveryDate).toLocaleDateString()
+          : "",
+      });
+    }
 
-    closeModalAdd();
+    // closeModalAdd();
+    // isOverlayMinimized.value = false; // Restore overlay after update
   } catch (error) {
     console.error("Error:", error);
-    alert("Failed to create order.");
+    alert(`Failed to ${isEditMode.value ? "update" : "create"} order.`);
   }
+  closeModalAdd();
+  isOverlayMinimized.value = false; // Restore overlay after update
 };
 
 const activeButton = ref("Documents"); // Default active button
@@ -957,7 +1055,10 @@ onMounted(() => {
               @click.stop
             >
               <h2 class="text-lg font-semibold mb-4 text-white text-center">
-                Enter PO Number
+                {{
+                  isEditMode ? "Edit Supplier Information" : "Enter PO Number"
+                }}
+                <!-- Enter PO Number -->
               </h2>
 
               <div class="space-y-4">
@@ -1046,7 +1147,7 @@ onMounted(() => {
                   @click="submitPO"
                   class="px-4 py-2 bg-[#6A5CFE] text-white rounded-md hover:bg-[#7C6CFF] transition-colors"
                 >
-                  Create Order
+                  {{ isEditMode ? "Update Order" : "Create Order" }}
                 </button>
               </div>
             </div>
@@ -1333,120 +1434,162 @@ onMounted(() => {
         >
           <div
             v-if="isModalOpen"
-            class="w-96 bg-[#1A1F36] text-white p-6 shadow-lg relative h-screen overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden"
+            :class="[
+              'bg-[#1A1F36] text-white p-6 shadow-lg relative h-screen overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden',
+              isOverlayMinimized ? 'w-16' : 'w-96',
+            ]"
           >
-            <!-- Close Button -->
+            <!-- Close Button (Visible only when not minimized) -->
             <button
+              v-if="!isOverlayMinimized"
               class="absolute top-4 right-4 text-gray-400 hover:text-white"
               @click="closeModal"
             >
               <X />
             </button>
 
-            <!-- Header -->
-            <div class="mb-6">
-              <h2 class="text-xl font-bold">
-                {{ selectedOrder?.orderNumber }}
-              </h2>
-              <p class="text-sm text-gray-500">Order Details</p>
-            </div>
-
-            <!-- Order Details -->
-            <div class="space-y-4">
-              <div>
-                <p class="text-sm text-gray-500">Created at</p>
-                <p class="font-medium">{{ selectedOrder?.dateCreated }}</p>
+            <!-- Content (Hidden when minimized) -->
+            <div v-if="!isOverlayMinimized" class="space-y-6">
+              <!-- Header -->
+              <div class="mb-6">
+                <h2 class="text-xl font-bold">
+                  {{ selectedOrder?.orderNumber }}
+                </h2>
+                <p class="text-sm text-gray-500">Order Details</p>
               </div>
 
-              <div>
-                <p class="text-sm text-gray-500">Status</p>
-                <span
-                  class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium"
-                  :class="{
-                    'bg-yellow-100 text-yellow-800':
-                      selectedOrder?.status === 'Pending',
-                    'bg-green-100 text-green-800':
-                      selectedOrder?.status === 'Completed',
-                    'bg-red-100 text-red-800':
-                      selectedOrder?.status === 'Needs Action',
-                    'bg-gray-100 text-gray-800': !selectedOrder?.status,
-                  }"
+              <!-- Order Details -->
+              <div class="space-y-4">
+                <div>
+                  <p class="text-sm text-gray-500">Created at</p>
+                  <p class="font-medium">{{ selectedOrder?.dateCreated }}</p>
+                </div>
+                <div>
+                  <p class="text-sm text-gray-500">Status</p>
+                  <span
+                    class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium"
+                    :class="{
+                      'bg-yellow-100 text-yellow-800':
+                        selectedOrder?.status === 'Pending',
+                      'bg-green-100 text-green-800':
+                        selectedOrder?.status === 'Completed',
+                      'bg-red-100 text-red-800':
+                        selectedOrder?.status === 'Needs Action',
+                      'bg-gray-100 text-gray-800': !selectedOrder?.status,
+                    }"
+                  >
+                    {{ selectedOrder?.status || "In progress" }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- Supplier Information -->
+              <div class="mt-6 border-t pt-4">
+                <div class="flex justify-between items-center mb-2">
+                  <h3 class="font-semibold">Supplier Information:</h3>
+                  <button
+                    @click="openEditModal(selectedOrder)"
+                    class="text-sm text-purple-400 hover:text-purple-300 flex items-center gap-1"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path
+                        d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
+                      ></path>
+                      <path
+                        d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
+                      ></path>
+                    </svg>
+                    Edit
+                  </button>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 text-sm">
+                  <p class="text-gray-500">Supplier Name:</p>
+                  <p>{{ selectedOrder?.supplierName || "Not set" }}</p>
+                  <p class="text-gray-500">Address:</p>
+                  <p>{{ selectedOrder?.address || "Not set" }}</p>
+                  <p class="text-gray-500">TIN ID:</p>
+                  <p>{{ selectedOrder?.tin_ID || "Not set" }}</p>
+                  <p class="text-gray-500">Delivery Date:</p>
+                  <p>{{ selectedOrder?.deliveryDate || "Not set" }}</p>
+                  <p class="text-gray-500">Mode of Procurement:</p>
+                  <p>{{ selectedOrder?.modeofProcurement || "Not set" }}</p>
+                </div>
+              </div>
+
+              <!-- Timeline -->
+              <div v-if="isAllowedRole">
+                <Timeline :value="events" align="left" class="left-timeline">
+                  <template #content="slotProps">
+                    <div class="timeline-item">
+                      <strong>{{ slotProps.item.title }}</strong>
+                      <div>{{ slotProps.item.description }}</div>
+                      <small class="text-gray-500">{{
+                        slotProps.item.time
+                      }}</small>
+                    </div>
+                  </template>
+                </Timeline>
+              </div>
+
+              <!-- Overlay Timeline Action Buttons -->
+              <div class="mt-4">
+                <button
+                  v-if="isAdmin && selectedOrder?.status === 'Pending'"
+                  @click="verifyDocument"
+                  class="px-4 py-2 bg-blue-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/50 active:scale-95 active:shadow-blue-500/75 active:bg-blue-700 mr-2"
                 >
-                  {{ selectedOrder?.status || "In progress" }}
-                </span>
+                  Initial Verify
+                </button>
+                <button
+                  v-if="isAdmin && selectedOrder?.status === 'Needs Action'"
+                  @click="verifyDocument"
+                  class="px-4 py-2 bg-purple-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-purple-600 hover:shadow-lg hover:shadow-purple-500/50 active:scale-95 active:shadow-purple-500/75 active:bg-purple-700 mr-2"
+                >
+                  Mark as Sent to Supplier
+                </button>
+                <button
+                  v-if="isAdmin && selectedOrder?.status === 'Verified'"
+                  @click="verifyDocument"
+                  class="px-4 py-2 bg-green-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-green-600 hover:shadow-lg hover:shadow-green-500/50 active:scale-95 active:shadow-green-500/75 active:bg-green-700"
+                >
+                  Mark as Received & Verified
+                </button>
+                <div
+                  v-if="selectedOrder?.status === 'Completed'"
+                  class="px-4 py-2 mt-4 bg-gray-200 text-gray-700 font-medium rounded-lg"
+                >
+                  ✓ Document Completed
+                </div>
               </div>
             </div>
 
-            <!-- Supplier Information -->
-            <div class="mt-6 border-t pt-4">
-              <h3 class="font-semibold mb-2">Supplier Information:</h3>
-              <div class="grid grid-cols-2 gap-2 text-sm">
-                <p class="text-gray-500">Supplier Name:</p>
-                <p>{{ selectedOrder?.supplierName || "Not set" }}</p>
-
-                <p class="text-gray-500">Address:</p>
-                <p>{{ selectedOrder?.address || "Not set" }}</p>
-
-                <p class="text-gray-500">TIN ID:</p>
-                <p>{{ selectedOrder?.tin_ID || "Not set" }}</p>
-
-                <p class="text-gray-500">Delivery Date:</p>
-                <p>{{ selectedOrder?.deliveryDate || "Not set" }}</p>
-
-                <p class="text-gray-500">Mode of Procurement:</p>
-                <p>{{ selectedOrder?.modeofProcurement || "Not set" }}</p>
-              </div>
-            </div>
-
-            <!-- Timeline -->
-            <div v-if="isAllowedRole">
-              <Timeline :value="events" align="left" class="left-timeline">
-                <template #content="slotProps">
-                  <div class="timeline-item">
-                    <strong>{{ slotProps.item.title }}</strong>
-                    <div>{{ slotProps.item.description }}</div>
-                    <small class="text-gray-500">{{
-                      slotProps.item.time
-                    }}</small>
-                  </div>
-                </template>
-              </Timeline>
-            </div>
-
-            <!-- Overlay Timeline Action Buttons -->
-            <div class="mt-4">
-              <!-- Initial Verification (Admin only) -->
-              <button
-                v-if="isAdmin && selectedOrder?.status === 'Pending'"
-                @click="verifyDocument"
-                class="px-4 py-2 bg-blue-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/50 active:scale-95 active:shadow-blue-500/75 active:bg-blue-700 mr-2"
+            <!-- Minimized State (Optional Icon or Indicator) -->
+            <div v-else class="flex items-center justify-center h-full">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="text-gray-400"
               >
-                Initial Verify
-              </button>
-              <!-- Sent to Supplier (Admin only) -->
-              <button
-                v-if="isAdmin && selectedOrder?.status === 'Needs Action'"
-                @click="verifyDocument"
-                class="px-4 py-2 bg-purple-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-purple-600 hover:shadow-lg hover:shadow-purple-500/50 active:scale-95 active:shadow-purple-500/75 active:bg-purple-700 mr-2"
-              >
-                Mark as Sent to Supplier
-              </button>
-
-              <!-- Final Verification (Admin only) -->
-              <button
-                v-if="isAdmin && selectedOrder?.status === 'Verified'"
-                @click="verifyDocument"
-                class="px-4 py-2 bg-green-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-green-600 hover:shadow-lg hover:shadow-green-500/50 active:scale-95 active:shadow-green-500/75 active:bg-green-700"
-              >
-                Mark as Recieved & Verified
-              </button>
-
-              <div
-                v-if="selectedOrder?.status === 'Completed'"
-                class="px-4 py-2 mt-4 bg-gray-200 text-gray-700 font-medium rounded-lg"
-              >
-                ✓ Document Completed
-              </div>
+                <path d="M6 9l6 6 6-6" />
+              </svg>
             </div>
           </div>
         </Transition>
