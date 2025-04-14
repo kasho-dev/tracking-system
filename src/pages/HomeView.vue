@@ -29,6 +29,7 @@ interface Document {
   trackingId: string;
   handledBy: string;
   createdBy: string;
+  createdByName?: string; // User's display name (optional)
   dateCreated: string;
   status: string;
   fileType?: string;
@@ -82,7 +83,7 @@ const fetchSelectedOrder = async () => {
     const record = await pb
       .collection("Collection_1")
       .getOne(selectedOrder.value.id, {
-        expand: "verifiedBy,verificationEvents.userId",
+        expand: "verifiedBy,verificationEvents.userId,createdBy",
       });
 
     // Ensure completedAt is preserved if it was set locally but not saved
@@ -110,11 +111,16 @@ const fetchSelectedOrder = async () => {
       orderNumber: `${record.Order_No}`,
       trackingId: record.trackingId || "",
       handledBy: record.handledBy || "Unknown",
-      createdBy: record.createdBy || "Unknown",
+      createdBy:
+        record.expand?.createdBy?.name ||
+        record.createdByName ||
+        record.createdBy ||
+        "System",
+      createdByName: record.expand?.createdBy?.name || record.createdByName,
       dateCreated: new Date(record.created).toLocaleString(),
       status: record.status || "Unknown",
       fileType: record.fileType || "xlsx",
-      supplierName: record.supplierName || "Unknown",
+      supplierName: record.supplierName || "Unknown1",
       address: record.address || "Unknown",
       tin_ID: record.tin_ID || "Unknown",
       modeofProcurement: record.modeofProcurement || "Unknown",
@@ -325,31 +331,101 @@ const verifyDocument = async () => {
   }
 };
 
+// UNDO Events
+const undoVerification = async () => {
+  if (!selectedOrder.value || !currentUser.value) return;
+
+  try {
+    // Don't allow undo if status is Completed
+    if (selectedOrder.value.status === "Completed") {
+      alert("Cannot undo completed documents");
+      return;
+    }
+
+    // Determine previous status based on current status
+    let previousStatus = "Pending";
+    let undoAction = "";
+    if (selectedOrder.value.status === "Verified") {
+      previousStatus = "Needs Action";
+      undoAction = "Reverted from Verified to Needs Action";
+    } else if (selectedOrder.value.status === "Needs Action") {
+      previousStatus = "Pending";
+      undoAction = "Reverted from Needs Action to Pending";
+    }
+
+    const undoTimestamp = new Date().toISOString();
+    const userInfo = {
+      userId: currentUser.value.id,
+      userName: currentUser.value.name || currentUser.value.email || "System",
+    };
+
+    // Create undo event with descriptive type
+    const undoEvent = {
+      type: "undo",
+      action: undoAction,
+      timestamp: undoTimestamp,
+      ...userInfo,
+    };
+
+    const updateData = {
+      status: previousStatus,
+      verificationEvents: [
+        ...(selectedOrder.value.verificationEvents || []),
+        undoEvent,
+      ],
+      updatedAt: undoTimestamp,
+    };
+
+    // Update backend
+    await pb
+      .collection("Collection_1")
+      .update(selectedOrder.value.id, updateData);
+
+    // Update local state
+    Object.assign(selectedOrder.value, updateData);
+
+    // Update in documents array
+    const docIndex = documents.value.findIndex(
+      (doc) => doc.id === selectedOrder.value?.id
+    );
+    if (docIndex !== -1) {
+      Object.assign(documents.value[docIndex], updateData);
+    }
+
+    console.log("Undo successful, status reverted to:", previousStatus);
+  } catch (error) {
+    console.error("Error undoing verification:", error);
+    alert("Failed to undo verification. Please try again.");
+  }
+};
+
 // Timeline Events Handler
 const events = computed(() => {
   if (!selectedOrder.value) return [];
 
-  // 1. Create base events with document creation
   const timelineEvents = [
     {
       title: "Document Created",
-      description: `Created by ${selectedOrder.value.createdBy || "System"}`,
+      description: `Created by ${
+        selectedOrder.value.createdByName ||
+        selectedOrder.value.createdBy ||
+        "System"
+      }`,
       time: formatTimestamp(selectedOrder.value.dateCreated),
     },
   ];
 
-  // 2. Add verification events with user info
   if (selectedOrder.value.verificationEvents) {
     selectedOrder.value.verificationEvents.forEach((event) => {
       timelineEvents.push({
         title: getVerificationTitle(event.type),
+        // action: event.type === "undo" ? event.action : undefined,
         description: `Action by ${event.userName || "Unknown"}`,
         time: formatTimestamp(event.timestamp),
       });
     });
   }
 
-  // 3. MANDATORY completion event (only if status is Completed)
   if (selectedOrder.value.status === "Completed") {
     const completionTime =
       selectedOrder.value.completedAt ||
@@ -360,7 +436,9 @@ const events = computed(() => {
       timelineEvents.push({
         title: "Document Completed",
         description: `Completed by ${
-          selectedOrder.value.verifiedByName || "System"
+          selectedOrder.value.verificationEvents?.find(
+            (event) => event.type === "final"
+          )?.userName || "Unknown"
         }`,
         time: formatTimestamp(completionTime),
       });
@@ -377,6 +455,7 @@ const getVerificationTitle = (type: string): string => {
     "sent to supplier": "Sent to Supplier",
     final: "Final Verification",
     completed: "Document Completed",
+    undo: "Cancelled Verification",
   };
   return titleMap[type] || "Verification Step";
 };
@@ -558,8 +637,12 @@ const fetchDocuments = async () => {
       orderNumber: `${record.Order_No}`,
       trackingId: record.trackingId,
       handledBy: record.handledBy,
-      createdBy: record.expand?.createdBy?.name || record.createdBy || "System",
-      createdByName: record.expand?.createdBy?.name,
+      createdBy:
+        record.expand?.createdBy?.name ||
+        record.createdByName ||
+        record.createdBy ||
+        "System",
+      createdByName: record.expand?.createdBy?.name || record.createdByName,
       dateCreated: new Date(record.created).toLocaleString(),
       created: record.created,
       status: record.status,
@@ -568,27 +651,19 @@ const fetchDocuments = async () => {
       tin_ID: record.tin_ID,
       modeofProcurement: record.modeofProcurement,
       deliveryDate: record.deliveryDate,
-      verifiedAt: record.verifiedAt, // Store verification timestamp
+      verifiedAt: record.verifiedAt,
       verifiedBy: record.verifiedBy,
       verifiedByName:
         record.expand?.verifiedBy?.name ||
         record.expand?.verifiedBy?.email ||
         "System",
-      updatedAt: record.updatedAt, // Store last updated timestamp
+      updatedAt: record.updatedAt,
       fileType: "xlsx",
-
       verificationEvents: record.verificationEvents?.map((event: any) => ({
         type: event.type,
         timestamp: event.timestamp,
         userId: event.userId,
-        userName:
-          record.expand?.["verificationEvents.userId"]?.find(
-            (u: any) => u.id === event.userId
-          )?.name ||
-          record.expand?.["verificationEvents.userId"]?.find(
-            (u: any) => u.id === event.userId
-          )?.email ||
-          "Unknown",
+        userName: event.userName,
       })),
     }));
   } catch (error) {
@@ -647,6 +722,12 @@ const submitPO = async () => {
   const formattedDeliveryDate = deliveryDate.value
     ? new Date(deliveryDate.value).toISOString()
     : "";
+
+  // Get current user info
+  const creatorId = currentUser.value?.id || "system";
+  const creatorName =
+    currentUser.value?.name || currentUser.value?.email || "System";
+
   const data = {
     Order_No: poNumber.value,
     supplierName: supplierName.value,
@@ -655,6 +736,8 @@ const submitPO = async () => {
     modeofProcurement: modeofProcurement.value,
     deliveryDate: formattedDeliveryDate,
     updatedAt: new Date().toISOString(),
+    createdBy: creatorId, // Store user ID
+    createdByName: creatorName, // Store user name/email
   };
   try {
     if (isEditMode.value && currentEditingId.value) {
@@ -688,8 +771,8 @@ const submitPO = async () => {
         ...data,
         trackingId: `seq${Math.floor(Math.random() * 1000000)}`,
         handledBy: "System",
-        createdBy: "Admin",
         status: "Pending",
+        // createdBy and createdByName are already included in data
       });
 
       documents.value.push({
@@ -697,7 +780,8 @@ const submitPO = async () => {
         orderNumber: `${record.Order_No}`,
         trackingId: record.trackingId,
         handledBy: record.handledBy,
-        createdBy: record.createdBy,
+        createdBy: creatorName, // Use the name for display
+        createdByName: creatorName, // Store both
         dateCreated: new Date(record.created).toLocaleString(),
         status: record.status,
         fileType: "xlsx",
@@ -756,7 +840,7 @@ const openModal = async (order: Document) => {
     completedAt: order.completedAt,
     verificationEvents: order.verificationEvents || [],
     fileType: order.fileType || "xlsx",
-    updatedAt: order.updatedAt
+    updatedAt: order.updatedAt,
   };
   isModalOpen.value = true;
 
@@ -770,8 +854,6 @@ const closeModal = () => {
   isModalOpen.value = false;
   selectedOrder.value = null;
 };
-
-
 
 //Documents Data
 const documents = ref<Document[]>([]);
@@ -1073,9 +1155,7 @@ onMounted(() => {
 <template>
   <body class="bg-[#0A0E1A] flex flex-grow p-4">
     <!-- Add PO Document Button -->
-    <div
-      class="sidebar w-64 bg-[#0A0E1A] text-white mr-4 rounded-lg"
-    >
+    <div class="sidebar w-64 bg-[#0A0E1A] text-white mr-4 rounded-lg">
       <button
         @click="openModalAdd"
         class="w-full flex items-center justify-center gap-2 bg-[#6A5CFE] text-white text-sm font-semibold py-3 rounded-xl hover:bg-[#7C6CFF] active:bg-[#5A4BD9] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 ease-out"
@@ -1582,6 +1662,8 @@ onMounted(() => {
                     :class="{
                       'bg-yellow-100 text-yellow-800':
                         selectedOrder?.status === 'Pending',
+                      'bg-blue-100 text-blue-500':
+                        selectedOrder?.status === 'Verified',
                       'bg-green-100 text-green-800':
                         selectedOrder?.status === 'Completed',
                       'bg-red-100 text-red-800':
@@ -1631,10 +1713,10 @@ onMounted(() => {
                   <p>{{ selectedOrder?.address || "Not set" }}</p>
                   <p class="text-gray-500">TIN ID:</p>
                   <p>{{ selectedOrder?.tin_ID || "Not set" }}</p>
-                  <p class="text-gray-500">Delivery Date:</p>
-                  <p>{{ selectedOrder?.deliveryDate || "Not set" }}</p>
                   <p class="text-gray-500">Mode of Procurement:</p>
                   <p>{{ selectedOrder?.modeofProcurement || "Not set" }}</p>
+                  <p class="text-gray-500">Delivery Date:</p>
+                  <p>{{ selectedOrder?.deliveryDate || "Not set" }}</p>
                 </div>
               </div>
 
@@ -1644,6 +1726,9 @@ onMounted(() => {
                   <template #content="slotProps">
                     <div class="timeline-item">
                       <strong>{{ slotProps.item.title }}</strong>
+                      <div v-if="slotProps.item.action">
+                        {{ slotProps.item.action }}
+                      </div>
                       <div>{{ slotProps.item.description }}</div>
                       <small class="text-gray-500">{{
                         slotProps.item.time
@@ -1654,28 +1739,57 @@ onMounted(() => {
               </div>
 
               <!-- Overlay Timeline Action Buttons -->
-              <div class="mt-4">
-                <button
-                  v-if="isAdmin && selectedOrder?.status === 'Pending'"
-                  @click="verifyDocument"
-                  class="px-4 py-2 bg-blue-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/50 active:scale-95 active:shadow-blue-500/75 active:bg-blue-700 mr-2"
-                >
-                  Initial Verify
-                </button>
-                <button
-                  v-if="isAdmin && selectedOrder?.status === 'Needs Action'"
-                  @click="verifyDocument"
-                  class="px-4 py-2 bg-purple-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-purple-600 hover:shadow-lg hover:shadow-purple-500/50 active:scale-95 active:shadow-purple-500/75 active:bg-purple-700 mr-2"
-                >
-                  Mark as Sent to Supplier
-                </button>
-                <button
-                  v-if="isAdmin && selectedOrder?.status === 'Verified'"
-                  @click="verifyDocument"
-                  class="px-4 py-2 bg-green-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-green-600 hover:shadow-lg hover:shadow-green-500/50 active:scale-95 active:shadow-green-500/75 active:bg-green-700"
-                >
-                  Mark as Received & Verified
-                </button>
+              <div class="mt-4 flex flex-wrap gap-2">
+                <template v-if="isAdmin">
+                  <div
+                    v-if="selectedOrder?.status === 'Pending'"
+                    class="flex gap-2"
+                  >
+                    <button
+                      @click="verifyDocument"
+                      class="px-4 py-2 bg-blue-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/50 active:scale-95 active:shadow-blue-500/75 active:bg-blue-700"
+                    >
+                      Initial Verify
+                    </button>
+                  </div>
+
+                  <div
+                    v-if="selectedOrder?.status === 'Needs Action'"
+                    class="flex gap-2"
+                  >
+                    <button
+                      @click="verifyDocument"
+                      class="px-4 py-2 bg-purple-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-purple-600 hover:shadow-lg hover:shadow-purple-500/50 active:scale-95 active:shadow-purple-500/75 active:bg-purple-700"
+                    >
+                      Mark as Sent to Supplier
+                    </button>
+                    <button
+                      @click="undoVerification"
+                      class="px-4 py-2 bg-gray-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-gray-600 hover:shadow-lg hover:shadow-gray-500/50 active:scale-95 active:shadow-gray-500/75 active:bg-gray-700"
+                    >
+                      Undo
+                    </button>
+                  </div>
+
+                  <div
+                    v-if="selectedOrder?.status === 'Verified'"
+                    class="flex gap-2"
+                  >
+                    <button
+                      @click="verifyDocument"
+                      class="px-4 py-2 bg-green-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-green-600 hover:shadow-lg hover:shadow-green-500/50 active:scale-95 active:shadow-green-500/75 active:bg-green-700"
+                    >
+                      Mark as Received & Verified
+                    </button>
+                    <button
+                      @click="undoVerification"
+                      class="px-4 py-2 bg-gray-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-gray-600 hover:shadow-lg hover:shadow-gray-500/50 active:scale-95 active:shadow-gray-500/75 active:bg-gray-700"
+                    >
+                      Undo
+                    </button>
+                  </div>
+                </template>
+
                 <div
                   v-if="selectedOrder?.status === 'Completed'"
                   class="px-4 py-2 mt-4 bg-gray-200 text-gray-700 font-medium rounded-lg"
@@ -1826,7 +1940,7 @@ th:first-child,
 td:first-child {
   width: 100px; /* Fixed width for checkbox column */
   padding-left: px; /* Consistent padding */
-  vertical-align: left; 
+  vertical-align: left;
   border-bottom: 1px solid #e5e7eb;
   word-wrap: break-word; /* Ensure long words break */
   overflow: hidden; /* Hide overflow */
@@ -1845,10 +1959,22 @@ tr:hover td {
   background-color: #f9fafb;
 } */
 
-th:nth-child(2), td:nth-child(2) { width: 25%; }  /* Order # */
-th:nth-child(3), td:nth-child(3) { width: 25%; }  /* Handled by */
-th:nth-child(4), td:nth-child(4) { width: 25%; }  /* Created by */
-th:nth-child(4), td:nth-child(4) { width: 20%; }  /* Date Created */
+th:nth-child(2),
+td:nth-child(2) {
+  width: 25%;
+} /* Order # */
+th:nth-child(3),
+td:nth-child(3) {
+  width: 25%;
+} /* Handled by */
+th:nth-child(4),
+td:nth-child(4) {
+  width: 25%;
+} /* Created by */
+th:nth-child(4),
+td:nth-child(4) {
+  width: 20%;
+} /* Date Created */
 
 /* etc */
 
