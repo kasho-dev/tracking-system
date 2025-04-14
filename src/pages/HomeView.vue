@@ -22,6 +22,8 @@ import {
   ChevronDown,
 } from "lucide-vue-next";
 
+
+
 // Define the type for documents
 interface Document {
   id: string;
@@ -53,6 +55,42 @@ interface Document {
   updatedAt?: string;
 }
 
+//delivery time
+const formatDeliveryDateTime = (dateString: string | undefined | null): string | null => {
+  if (!dateString) return null;
+  
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+  } catch (error) {
+    console.error("Error formatting date:", error);
+    return null;
+  }
+};
+//delivery date restriction for create order
+const dateError = ref(false);
+const minDeliveryDate = ref(new Date().toISOString().slice(0, 16)); // Current date/time
+
+const validateDeliveryDate = () => {
+  if (!deliveryDate.value) {
+    dateError.value = false;
+    return false;
+  }
+  
+  const selectedDate = new Date(deliveryDate.value);
+  const now = new Date();
+  dateError.value = selectedDate <= now;
+  return !dateError.value;
+};
+
+//lapsed script
 const shouldMarkAsLapsed = (doc: {
   deliveryDate: string;
   status: string;
@@ -731,6 +769,14 @@ const fetchDocuments = async () => {
 
 // Submit PO to Database
 const submitPO = async () => {
+
+    
+
+  //reset validation first
+  if (!validateDeliveryDate()) {
+    alert('Error: Delivery date must be in the future');
+    return;
+  }
   // Reset all errors first
   showPONumberError.value = false;
   showSupplierError.value = false;
@@ -791,13 +837,19 @@ const submitPO = async () => {
     address: address.value,
     tin_ID: tin_ID.value,
     modeofProcurement: modeofProcurement.value,
-    deliveryDate: formattedDeliveryDate,
+    
+    deliveryDate: deliveryDate.value ? new Date(deliveryDate.value).toISOString() : "",
+
     updatedAt: new Date().toISOString(),
     createdBy: creatorId, // Store user ID
     createdByName: creatorName, // Store user name/email
+    
+    
   };
+  
   try {
     if (isEditMode.value && currentEditingId.value) {
+      await pb.collection("Collection_1").update(currentEditingId.value, data);
       const record = await pb
         .collection("Collection_1")
         .update(currentEditingId.value, data);
@@ -1368,20 +1420,25 @@ onMounted(() => {
                 </div>
 
                 <!-- Delivery Date -->
-                <div>
-                  <label class="block text-gray-400 text-sm mb-1"
-                    >Delivery Date<span class="text-red-500">*</span></label
-                  >
-                  <input
-                    v-model="deliveryDate"
-                    type="datetime-local"
-                    class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    :class="{ 'border-red-500': showSupplierError }"
-                  />
-                  <p v-if="showSupplierError" class="text-red-500 text-xs mt-1">
-                    Delivery date is required
-                  </p>
-                </div>
+                              <div>
+                <label class="block text-gray-400 text-sm mb-1">
+                  Delivery Date<span class="text-red-500">*</span>
+                </label>
+                <input
+                  v-model="deliveryDate"
+                  type="datetime-local"
+                  :min="minDeliveryDate"
+                  class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  :class="{ 'border-red-500': showDeliveryDateError || dateError }"
+                  @change="validateDeliveryDate"
+                />
+                <p v-if="showDeliveryDateError" class="text-red-500 text-xs mt-1">
+                  Delivery date is required
+                </p>
+                <p v-if="dateError" class="text-red-500 text-xs mt-1">
+                  Delivery date must be in the future
+                </p>
+              </div>
               </div>
 
               <div class="flex justify-end gap-2 mt-6">
@@ -1417,7 +1474,7 @@ onMounted(() => {
         >
           <span class="flex items-center gap-2 sidebar-button-content">
             <File />
-            <span class="sidebar-button-text">Documents</span>
+            <span class="sidebar-button-text">All</span>
           </span>
           <span class="text-white">{{ documents.length }}</span>
         </div>
@@ -1776,7 +1833,7 @@ onMounted(() => {
                   <p class="text-gray-500">Mode of Procurement:</p>
                   <p>{{ selectedOrder?.modeofProcurement || "Not set" }}</p>
                   <p class="text-gray-500">Delivery Date:</p>
-                  <p>{{ selectedOrder?.deliveryDate || "Not set" }}</p>
+                  <p>{{ formatDeliveryDateTime(selectedOrder?.deliveryDate) || "Not set" }}</p>
                 </div>
               </div>
 
