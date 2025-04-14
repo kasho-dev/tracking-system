@@ -53,6 +53,36 @@ interface Document {
   updatedAt?: string;
 }
 
+const shouldMarkAsLapsed = (doc: {
+  deliveryDate: string;
+  status: string;
+  verificationEvents?: Array<{ type: string; timestamp: string }>;
+  updatedAt?: string;
+}): boolean => {
+  // Skip if already completed
+  if (doc.status === "Completed") return false;
+
+  // Skip if document has been updated after delivery date
+  const deliveryDate = new Date(doc.deliveryDate);
+  const today = new Date();
+  
+  // For testing: 1 minute threshold (change to 5 days in production)
+  const lapsedThreshold = new Date(deliveryDate.getTime() + 120000); // 1 minute
+  // const lapsedThreshold = new Date(deliveryDate.getTime() + 5 * 24 * 60 * 60 * 1000); // 5 days
+
+  // Check if we're past the lapse threshold
+  if (today <= lapsedThreshold) return false;
+
+  // Check if document is in Pending or Needs Action status
+  if (['Pending', 'Needs Action'].includes(doc.status)) return true;
+
+
+  // Default case - no activity since delivery date
+  return true;
+};
+
+
+
 const showPONumberError = ref(false);
 const showSupplierError = ref(false);
 const showAddressError = ref(false);
@@ -456,6 +486,7 @@ const getVerificationTitle = (type: string): string => {
     final: "Final Verification",
     completed: "Document Completed",
     undo: "Cancelled Verification",
+     lapsed: "Document Lapsed"
   };
   return titleMap[type] || "Verification Step";
 };
@@ -627,11 +658,36 @@ const fetchDocuments = async () => {
   try {
     const records = await pb.collection("Collection_1").getFullList({
       sort: "-created",
-      expand:
-        "verifiedAt,completedAt,updatedAt,verifiedBy,verificationEvents.userId,createdBy",
+      expand: "verifiedAt,completedAt,updatedAt,verifiedBy,verificationEvents.userId,createdBy",
     });
 
-    documents.value = records.map((record) => ({
+    documents.value = await Promise.all(records.map(async (record) => {
+      const docData = {
+        deliveryDate: record.deliveryDate,
+        status: record.status,
+        verificationEvents: record.verificationEvents,
+        updatedAt: record.updatedAt
+      };
+
+      // Check if document should be marked as lapsed
+      let status = record.status;
+      if (shouldMarkAsLapsed(docData)) {
+        status = "Lapsed";
+        // Update in PocketBase if not already marked
+        if (record.status !== "Lapsed") {
+          try {
+            await pb.collection("Collection_1").update(record.id, { 
+              status: "Lapsed",
+              updatedAt: new Date().toISOString() 
+            });
+          } catch (error) {
+            console.error("Error updating document status:", error);
+          }
+        }
+      }
+
+
+      return {
       id: record.id,
       completedAt: record.completedAt,
       orderNumber: `${record.Order_No}`,
@@ -645,7 +701,7 @@ const fetchDocuments = async () => {
       createdByName: record.expand?.createdBy?.name || record.createdByName,
       dateCreated: new Date(record.created).toLocaleString(),
       created: record.created,
-      status: record.status,
+      status: status,
       supplierName: record.supplierName,
       address: record.address,
       tin_ID: record.tin_ID,
@@ -665,6 +721,7 @@ const fetchDocuments = async () => {
         userId: event.userId,
         userName: event.userName,
       })),
+    };
     }));
   } catch (error) {
     console.error("Error fetching documents:", error);
@@ -1062,6 +1119,9 @@ const filteredDocuments = computed(() => {
     filtered = filtered.filter(
       (doc) => doc.status === "Pending" || doc.status === "Verified"
     );
+
+  } else if (activeButton.value === "Lapsed") {
+    filtered = filtered.filter((doc) => doc.status === "Lapsed");
   }
 
   return filtered;
@@ -1378,48 +1438,48 @@ onMounted(() => {
 
         <!-- Pending -->
         <div
-          @click="setActive('Pending')"
-          class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
-          :class="
-            activeButton === 'Pending'
-              ? 'bg-[#2E3347] text-purple-400'
-              : 'text-purple-400 hover:bg-[#2E3347]'
-          "
-        >
-          <span class="flex items-center gap-2"><Clock /> Pending</span>
-          <span class="text-white">{{ statusCounts.Pending || 0 }}</span>
-        </div>
+  @click="setActive('Pending')"
+  class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
+  :class="
+    activeButton === 'Pending'
+      ? 'bg-[#2E3347] text-purple-400'
+      : 'text-purple-400 hover:bg-[#2E3347]'
+  "
+>
+  <span class="flex items-center gap-2"><Clock /> Pending</span>
+  <span class="text-white">{{ statusCounts.Pending || 0 }}</span>
+</div>
+
+ <!-- Needs Action -->
+ <div
+  @click="setActive('Needs Action')"
+  class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
+  :class="
+    activeButton === 'Needs Action'
+      ? 'bg-[#2E3347] text-yellow-400'
+      : 'text-yellow-400 hover:bg-[#2E3347]'
+  "
+>
+  <span class="flex items-center gap-2"><User /> Needs Action</span>
+  <span class="text-white">{{ statusCounts['Needs Action'] || 0 }}</span>
+</div>
 
         <!-- Lapsed -->
         <div
-          @click="setActive('Lapsed')"
-          class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
-          :class="
-            activeButton === 'Lapsed'
-              ? 'bg-[#2E3347] text-yellow-400'
-              : 'text-yellow-400 hover:bg-[#2E3347]'
-          "
-        >
-          <span class="flex items-center gap-2"><TriangleAlert /> Lapsed</span>
-          <span class="text-white">{{ statusCounts.Lapsed || 0 }}</span>
-        </div>
+  @click="setActive('Lapsed')"
+  class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
+  :class="
+    activeButton === 'Lapsed'
+      ? 'bg-[#2E3347] text-red-500'
+      : 'text-red-500 hover:bg-[#2E3347]'
+  "
+>
+  <span class="flex items-center gap-2"><TriangleAlert /> Lapsed</span>
+  <span class="text-white">{{ statusCounts.Lapsed || 0 }}</span>
+</div>
 
-        <!-- Needs Action -->
-        <div
-          @click="setActive('Needs Action')"
-          class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
-          :class="
-            activeButton === 'Needs Action'
-              ? 'bg-[#2E3347] text-red-500'
-              : 'text-red-500 hover:bg-[#2E3347]'
-          "
-        >
-          <span class="flex items-center gap-2"><User /> Needs Action</span>
-          <span class="text-white">{{
-            statusCounts["Needs Action"] || 0
-          }}</span>
-        </div>
-      </div>
+       
+</div>
       <!-- End of Sidebar Buttons -->
     </div>
 
@@ -1667,7 +1727,7 @@ onMounted(() => {
                       'bg-green-100 text-green-800':
                         selectedOrder?.status === 'Completed',
                       'bg-red-100 text-red-800':
-                        selectedOrder?.status === 'Needs Action',
+                        selectedOrder?.status === 'Needs Action' || selectedOrder?.status === 'Lapsed',
                       'bg-gray-100 text-gray-800': !selectedOrder?.status,
                     }"
                   >
