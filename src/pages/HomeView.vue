@@ -162,6 +162,8 @@ const fetchSelectedOrder = async () => {
         expand: "verifiedBy,verificationEvents.userId,createdBy",
       });
 
+      
+
     // Ensure completedAt is preserved if it was set locally but not saved
     if (selectedOrder.value.status === "Completed" && !record.completedAt) {
       await pb.collection("Collection_1").update(selectedOrder.value.id, {
@@ -918,10 +920,16 @@ const submitPO = async () => {
     return; // Stop if validation fails
   }
 
+<<<<<<< HEAD
   // Convert Philippine time back to UTC before saving to PocketBase
   const phDate = new Date(deliveryDate.value);
   const utcDate = new Date(phDate.getTime() - 8 * 60 * 60 * 1000);
   const formattedDeliveryDate = utcDate.toISOString();
+=======
+  const formattedDeliveryDate = deliveryDate.value
+    ? new Date(deliveryDate.value).toISOString()
+    : null;
+>>>>>>> 343ed9f (- value change)
 
   // Get current user info
   const creatorId = currentUser.value?.id || "system";
