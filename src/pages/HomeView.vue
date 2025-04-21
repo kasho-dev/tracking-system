@@ -3,7 +3,7 @@
 // import Vue from "../assets/vue.svg";
 // import Button from "primevue/button";
 // import { defineStore } from "pinia";
-import { onMounted, ref, computed } from "vue";
+import { onMounted, ref, computed, onUnmounted } from "vue";
 import { useSearchStore } from "../stores/searchStore"; // Import the Pinia store
 import * as XLSX from "xlsx";
 import Timeline from "primevue/timeline";
@@ -29,9 +29,13 @@ interface Document {
   id: string;
   orderNumber: string;
   trackingId: string;
+
   handledBy: string;
   createdBy: string;
   createdByName?: string; // User's display name (optional)
+  lastModifiedBy?: string;
+  lastModifiedByName?: string;
+
   dateCreated: string;
   status: string;
   fileType?: string;
@@ -236,23 +240,46 @@ const startPolling = () => {
 // };
 // End of Refresh Interval
 
+// const formatDateShort = (dateString: string) => {
+//   return new Date(dateString).toLocaleDateString("en-US", {
+//     month: "short",
+//     day: "numeric",
+//   });
+// };
+// Table Script
+
 //Timeline Script
 
 const editSupplierInfo = async () => {
-  if (!selectedOrder.value) return;
+  if (!selectedOrder.value || !currentUser.value) return;
 
   try {
-    // Prepare the update data
+    const modifierName =
+      currentUser.value?.name || currentUser.value?.email || "System";
+
+    // Create edit event for timeline
+    const editEvent = {
+      type: "edit",
+      timestamp: new Date().toISOString(),
+      userId: currentUser.value.id,
+      userName: modifierName,
+    };
+
     const updateData = {
       supplierName: selectedOrder.value.supplierName,
       address: selectedOrder.value.address,
       tin_ID: selectedOrder.value.tin_ID,
       modeofProcurement: selectedOrder.value.modeofProcurement,
       deliveryDate: selectedOrder.value.deliveryDate,
+      lastModifiedBy: currentUser.value.id,
+      lastModifiedByName: modifierName,
       updatedAt: new Date().toISOString(),
+      verificationEvents: [
+        ...(selectedOrder.value.verificationEvents || []),
+        editEvent,
+      ],
     };
 
-    // Update in PocketBase
     await pb
       .collection("Collection_1")
       .update(selectedOrder.value.id, updateData);
@@ -265,10 +292,25 @@ const editSupplierInfo = async () => {
       documents.value[docIndex] = {
         ...documents.value[docIndex],
         ...updateData,
+        verificationEvents: [
+          ...(documents.value[docIndex].verificationEvents || []),
+          editEvent,
+        ],
       };
     }
 
-    // Show success feedback
+    // Update selectedOrder
+    if (selectedOrder.value) {
+      selectedOrder.value = {
+        ...selectedOrder.value,
+        ...updateData,
+        verificationEvents: [
+          ...(selectedOrder.value.verificationEvents || []),
+          editEvent,
+        ],
+      };
+    }
+    await fetchSelectedOrder();
     alert("Supplier information updated successfully!");
   } catch (error) {
     console.error("Error updating supplier information:", error);
@@ -294,6 +336,9 @@ const isAllowedRole = computed(() => {
 
 const verifyDocument = async () => {
   if (!selectedOrder.value || !currentUser.value) return;
+
+  const modifierName =
+    currentUser.value?.name || currentUser.value?.email || "System";
 
   try {
     const verificationTimestamp = new Date().toISOString();
@@ -333,7 +378,10 @@ const verifyDocument = async () => {
           },
         ],
         completedAt: verificationTimestamp,
-        updatedAt: verificationTimestamp,
+        handledBy: modifierName, // Add this line
+        lastModifiedBy: currentUser.value.id,
+        lastModifiedByName: modifierName,
+        updatedAt: new Date().toISOString(),
         verifiedBy: userInfo.userId,
         verifiedByName: userInfo.userName,
       };
@@ -349,7 +397,11 @@ const verifyDocument = async () => {
         (doc) => doc.id === selectedOrder.value?.id
       );
       if (docIndex !== -1) {
-        Object.assign(documents.value[docIndex], updateData);
+        documents.value[docIndex] = {
+          ...documents.value[docIndex],
+          ...updateData,
+          handledBy: modifierName,
+        };
       }
 
       return;
@@ -379,6 +431,9 @@ const verifyDocument = async () => {
       verifiedBy: userInfo.userId,
       verifiedByName: userInfo.userName,
       updatedAt: verificationTimestamp,
+      handledBy: modifierName, // Add this line
+      lastModifiedBy: currentUser.value.id, // Add this line
+      lastModifiedByName: modifierName, // Add this line
     };
 
     await pb
@@ -391,7 +446,11 @@ const verifyDocument = async () => {
       (doc) => doc.id === selectedOrder.value?.id
     );
     if (docIndex !== -1) {
-      Object.assign(documents.value[docIndex], updateData);
+      documents.value[docIndex] = {
+        ...documents.value[docIndex],
+        ...updateData,
+        handledBy: modifierName,
+      };
     }
   } catch (error) {
     console.error("Error verifying document:", error);
@@ -402,6 +461,9 @@ const verifyDocument = async () => {
 // UNDO Events
 const undoVerification = async () => {
   if (!selectedOrder.value || !currentUser.value) return;
+
+  const modifierName =
+    currentUser.value?.name || currentUser.value?.email || "System";
 
   try {
     // Don't allow undo if status is Completed
@@ -441,6 +503,10 @@ const undoVerification = async () => {
         ...(selectedOrder.value.verificationEvents || []),
         undoEvent,
       ],
+
+      handledBy: modifierName, // Add this line
+      lastModifiedBy: currentUser.value.id,
+      lastModifiedByName: modifierName,
       updatedAt: undoTimestamp,
     };
 
@@ -457,7 +523,11 @@ const undoVerification = async () => {
       (doc) => doc.id === selectedOrder.value?.id
     );
     if (docIndex !== -1) {
-      Object.assign(documents.value[docIndex], updateData);
+      documents.value[docIndex] = {
+        ...documents.value[docIndex],
+        ...updateData,
+        handledBy: modifierName,
+      };
     }
 
     console.log("Undo successful, status reverted to:", previousStatus);
@@ -487,7 +557,6 @@ const events = computed(() => {
     selectedOrder.value.verificationEvents.forEach((event) => {
       timelineEvents.push({
         title: getVerificationTitle(event.type),
-        // action: event.type === "undo" ? event.action : undefined,
         description: `Action by ${event.userName || "Unknown"}`,
         time: formatTimestamp(event.timestamp),
       });
@@ -524,7 +593,8 @@ const getVerificationTitle = (type: string): string => {
     final: "Final Verification",
     completed: "Document Completed",
     undo: "Cancelled Verification",
-     lapsed: "Document Lapsed"
+     lapsed: "Document Lapsed",
+    edit: "Document Edited",
   };
   return titleMap[type] || "Verification Step";
 };
@@ -696,7 +766,8 @@ const fetchDocuments = async () => {
   try {
     const records = await pb.collection("Collection_1").getFullList({
       sort: "-created",
-      expand: "verifiedAt,completedAt,updatedAt,verifiedBy,verificationEvents.userId,createdBy",
+      expand:
+        "verifiedAt,completedAt,updatedAt,verifiedBy,verificationEvents.userId,createdBy,lastModifiedBy",
     });
 
     documents.value = await Promise.all(records.map(async (record) => {
@@ -730,16 +801,23 @@ const fetchDocuments = async () => {
       completedAt: record.completedAt,
       orderNumber: `${record.Order_No}`,
       trackingId: record.trackingId,
-      handledBy: record.handledBy,
+
+      handledBy:
+        record.expand?.lastModifiedBy?.name ||
+        record.lastModifiedByName ||
+        record.expand?.verifiedBy?.name ||
+        record.expand?.createdBy?.name ||
+        "System",
       createdBy:
         record.expand?.createdBy?.name ||
         record.createdByName ||
         record.createdBy ||
         "System",
+
       createdByName: record.expand?.createdBy?.name || record.createdByName,
-      dateCreated: new Date(record.created).toLocaleString(),
-      created: record.created,
-      status: status,
+      dateCreated: record.created, // Store as ISO string
+      // created: record.created,
+      status: record.status,
       supplierName: record.supplierName,
       address: record.address,
       tin_ID: record.tin_ID,
@@ -831,6 +909,10 @@ const submitPO = async () => {
   const creatorName =
     currentUser.value?.name || currentUser.value?.email || "System";
 
+  const modifierId = currentUser.value?.id || "system";
+  const modifierName =
+    currentUser.value?.name || currentUser.value?.email || "System";
+
   const data = {
     Order_No: poNumber.value,
     supplierName: supplierName.value,
@@ -840,6 +922,8 @@ const submitPO = async () => {
     
     deliveryDate: deliveryDate.value ? new Date(deliveryDate.value).toISOString() : "",
 
+    lastModifiedBy: modifierId,
+    lastModifiedByName: modifierName,
     updatedAt: new Date().toISOString(),
     createdBy: creatorId, // Store user ID
     createdByName: creatorName, // Store user name/email
@@ -879,7 +963,7 @@ const submitPO = async () => {
       const record = await pb.collection("Collection_1").create({
         ...data,
         trackingId: `seq${Math.floor(Math.random() * 1000000)}`,
-        handledBy: "System",
+        handledBy: creatorName,
         status: "Pending",
         // createdBy and createdByName are already included in data
       });
@@ -1259,6 +1343,35 @@ onMounted(() => {
   startPolling();
 });
 
+// Add this to your script section
+const now = ref(new Date());
+const newDocumentThreshold = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+// Update the current time every minute
+const updateNow = () => {
+  now.value = new Date();
+};
+const nowInterval = setInterval(updateNow, 60000);
+
+onUnmounted(() => {
+  clearInterval(nowInterval);
+});
+
+// Computed property to check if a document is new
+const isNewDocument = (dateCreated: string) => {
+  try {
+    const created = new Date(dateCreated);
+    if (isNaN(created.getTime())) {
+      console.warn(`Invalid dateCreated: ${dateCreated}`);
+      return false;
+    }
+    return now.value.getTime() - created.getTime() < newDocumentThreshold;
+  } catch (error) {
+    console.error(`Error parsing dateCreated: ${dateCreated}`, error);
+    return false;
+  }
+};
+
 // onUnmounted(() => {
 //   stopPolling();
 // });
@@ -1593,7 +1706,7 @@ onMounted(() => {
 
               <!-- Order # Column -->
               <th
-                class="p-3 text-left cursor-pointer"
+                class="p-3 text-left cursor-pointer min-w-[120px]"
                 @click="toggleSort('orderNumber')"
               >
                 <div class="flex items-center gap-1">
@@ -1612,7 +1725,7 @@ onMounted(() => {
 
               <!-- Handled By Column -->
               <th
-                class="p-3 text-left cursor-pointer"
+                class="p-3 text-left cursor-pointer min-w-[120px]"
                 @click="toggleSort('handledBy')"
               >
                 <div class="flex items-center gap-1">
@@ -1631,7 +1744,7 @@ onMounted(() => {
 
               <!-- Created By Column -->
               <th
-                class="p-3 text-left cursor-pointer"
+                class="p-3 text-left cursor-pointer min-w-[120px]"
                 @click="toggleSort('createdBy')"
               >
                 <div class="flex items-center gap-1">
@@ -1650,7 +1763,7 @@ onMounted(() => {
 
               <!-- Date Created Column -->
               <th
-                class="p-3 text-left cursor-pointer"
+                class="p-3 text-left cursor-pointer min-w-[150px]"
                 @click="toggleSort('dateCreated')"
               >
                 <div class="flex items-center gap-1">
@@ -1680,38 +1793,54 @@ onMounted(() => {
             <tr
               v-for="doc in sortedDocuments"
               :key="doc.id"
-              class="border-b hover:bg-gray-200 text-sm"
+              class="border-b hover:bg-gray-200 text-sm relative"
             >
+              <!-- New document indicator (absolute positioned dot) -->
+
               <!-- Checkbox Cell -->
-              <td class="p-3 text-left">
+              <td class="p-3 text-left w-12 relative">
                 <input
                   type="checkbox"
-                  class="w-10 h-4"
+                  class="w-4 h-4"
                   :value="doc.id"
                   v-model="selectedDocuments"
                 />
+                <div
+                  v-if="isNewDocument(doc.dateCreated)"
+                  class="absolute left-8 top-1/2 -translate-y-1/2 w-2 h-2 bg-blue-500 rounded-full"
+                ></div>
               </td>
 
               <!-- Order # Cell -->
-              <td class="p-3 text-left wrap-text">
+              <td class="p-3 text-left min-w-[120px]">
                 <a
                   href="#"
                   class="text-blue-600 hover:underline"
                   @click.prevent="openModal(doc)"
                 >
                   {{ doc.orderNumber }}
+                  <!-- New badge next to order number -->
+                  <span
+                    v-if="isNewDocument(doc.dateCreated)"
+                    class="ml-2 px-1.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 rounded-full"
+                  >
+                    New
+                  </span>
                 </a>
                 <div class="text-xs text-gray-500">{{ doc.trackingId }}</div>
               </td>
 
               <!-- Handled By Cell -->
-              <td class="p-3 text-left wrap-text">{{ doc.handledBy }}</td>
+              <td class="p-3 text-left min-w-[120px]">
+                {{ doc.handledBy }}
+                <div v-if="doc.updatedAt" class="text-xs text-gray-500"></div>
+              </td>
 
               <!-- Created By Cell -->
-              <td class="p-3 text-left wrap-text">{{ doc.createdBy }}</td>
+              <td class="p-3 text-left min-w-[120px]">{{ doc.createdBy }}</td>
 
               <!-- Date Created Cell -->
-              <td class="p-3 text-left">{{ doc.dateCreated }}</td>
+              <td class="p-3 text-left min-w-[150px]">{{ doc.dateCreated }}</td>
             </tr>
           </tbody>
         </table>
