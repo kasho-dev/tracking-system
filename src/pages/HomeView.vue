@@ -212,7 +212,14 @@ const fetchSelectedOrder = async () => {
       id: record.id,
       orderNumber: `${record.Order_No}`,
       trackingId: record.trackingId || "",
-      handledBy: record.handledBy || "Unknown",
+      handledBy:
+        record.expand?.lastModifiedBy?.name ||
+        record.lastModifiedByName ||
+        record.expand?.verifiedBy?.name ||
+        record.expand?.createdBy?.name ||
+        record.createdByName ||
+        record.createdBy ||
+        "Unknown",
       createdBy:
         record.expand?.createdBy?.name ||
         record.createdByName ||
@@ -301,6 +308,7 @@ const editSupplierInfo = async () => {
       deliveryDate: selectedOrder.value.deliveryDate,
       lastModifiedBy: currentUser.value.id,
       lastModifiedByName: modifierName,
+      handledBy: modifierName, // Add this line to update handledBy with the current user
       updated: new Date().toISOString(),
       verificationEvents: [
         ...(selectedOrder.value.verificationEvents || []),
@@ -894,7 +902,7 @@ const fetchDocuments = async () => {
 const submitPO = async () => {
   //reset validation first
   if (!validateDeliveryDate()) {
-    alert("Error: Delivery date must be in the future");
+    // alert("Error: Delivery date must be in the future");
     return;
   }
   // Reset all errors first
@@ -964,8 +972,17 @@ const submitPO = async () => {
     modeofProcurement: modeofProcurement.value,
     deliveryDate: formattedDeliveryDate,
     updated: new Date().toISOString(),
-    createdBy: creatorId,
-    createdByName: creatorName,
+    // Only set createdBy and createdByName for new documents
+    ...(isEditMode.value ? {} : {
+      createdBy: creatorId,
+      createdByName: creatorName,
+    }),
+    // Always set lastModifiedBy and handledBy for edits
+    ...(isEditMode.value ? {
+      lastModifiedBy: currentUser.value?.id || "system",
+      lastModifiedByName: currentUser.value?.name || currentUser.value?.email || "System",
+      handledBy: currentUser.value?.name || currentUser.value?.email || "System"
+    } : {})
   };
 
   try {
