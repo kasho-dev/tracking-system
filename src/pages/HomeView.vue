@@ -65,15 +65,15 @@ const formatDeliveryDateTime = (
 
   try {
     const date = new Date(dateString);
-    const phTime = new Date(date.getTime() + 8 * 60 * 60 * 1000);
-    return phTime.toLocaleString("en-US", {
+    // Instead of adding 8 hours, use the timeZone option to format in Philippine time
+    return date.toLocaleString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
-      timeZone: "Asia/Manila",
+      timeZone: "Asia/Manila"
     });
   } catch (error) {
     console.error("Error formatting date:", error);
@@ -162,8 +162,6 @@ const fetchSelectedOrder = async () => {
         expand: "verifiedBy,verificationEvents.userId,createdBy",
       });
 
-      
-
     // Ensure completedAt is preserved if it was set locally but not saved
     if (selectedOrder.value.status === "Completed" && !record.completedAt) {
       await pb.collection("Collection_1").update(selectedOrder.value.id, {
@@ -183,13 +181,31 @@ const fetchSelectedOrder = async () => {
       };
     });
 
-    // Convert UTC delivery date to Philippine time
-    let phDeliveryDate = "";
+    // Format delivery date in Philippine time (keep this as is since it's working)
+    let formattedDeliveryDate = null;
     if (record.deliveryDate) {
-      const utcDate = new Date(record.deliveryDate);
-      const phTime = new Date(utcDate.getTime() + 8 * 60 * 60 * 1000);
-      phDeliveryDate = phTime.toLocaleDateString();
+      const date = new Date(record.deliveryDate);
+      const phDate = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+      formattedDeliveryDate = phDate.toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true
+      });
     }
+
+    // Format created date without adding 8 hours
+    const formattedCreatedDate = new Date(record.created).toLocaleString("en-US", {
+      month: "numeric",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true
+    });
 
     selectedOrder.value = {
       ...selectedOrder.value,
@@ -203,14 +219,14 @@ const fetchSelectedOrder = async () => {
         record.createdBy ||
         "System",
       createdByName: record.expand?.createdBy?.name || record.createdByName,
-      dateCreated: new Date(record.created).toLocaleString(),
+      dateCreated: formattedCreatedDate,
       status: record.status || "Unknown",
       fileType: record.fileType || "xlsx",
       supplierName: record.supplierName || "Unknown1",
       address: record.address || "Unknown",
       tin_ID: record.tin_ID || "Unknown",
       modeofProcurement: record.modeofProcurement || "Unknown",
-      deliveryDate: phDeliveryDate,
+      deliveryDate: formattedDeliveryDate || "",
       completedAt: record.completedAt || selectedOrder.value.completedAt,
       verifiedAt: record.verifiedAt,
       verifiedBy: record.verifiedBy,
@@ -743,17 +759,23 @@ const openEditModal = (order: Document) => {
   tin_ID.value = order.tin_ID;
   modeofProcurement.value = order.modeofProcurement;
   
-  // Use the already converted Philippine time from selectedOrder
-  if (selectedOrder.value?.deliveryDate) {
-    const phDate = new Date(selectedOrder.value.deliveryDate);
-    deliveryDate.value = phDate.toISOString().slice(0, 16);
+  // Format the date for datetime-local input without adding 8 hours
+  if (order.deliveryDate) {
+    const date = new Date(order.deliveryDate);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    
+    deliveryDate.value = `${year}-${month}-${day}T${hours}:${minutes}`;
   } else {
     deliveryDate.value = "";
   }
   
   showModal.value = true;
-  isOverlayMinimized.value = false; // Minimize overlay when edit starts
-  isModalOpen.value = false; // Close the main overlay when editing
+  isOverlayMinimized.value = false;
+  isModalOpen.value = false;
 };
 
 const formatDateForInput = (dateString: string) => {
@@ -942,8 +964,8 @@ const submitPO = async () => {
     modeofProcurement: modeofProcurement.value,
     deliveryDate: formattedDeliveryDate,
     updated: new Date().toISOString(),
-    createdBy: creatorId, // Store user ID
-    createdByName: creatorName, // Store user name/email
+    createdBy: creatorId,
+    createdByName: creatorName,
   };
 
   try {
@@ -959,18 +981,14 @@ const submitPO = async () => {
         documents.value[docIndex] = {
           ...documents.value[docIndex],
           ...data,
-          deliveryDate: formattedDeliveryDate
-            ? new Date(formattedDeliveryDate).toLocaleDateString()
-            : "",
+          deliveryDate: formatDeliveryDateTime(formattedDeliveryDate) || "",
         };
       }
       if (selectedOrder.value?.id === currentEditingId.value) {
         selectedOrder.value = {
           ...selectedOrder.value,
           ...data,
-          deliveryDate: formattedDeliveryDate
-            ? new Date(formattedDeliveryDate).toLocaleDateString()
-            : "",
+          deliveryDate: formatDeliveryDateTime(formattedDeliveryDate) || "",
         };
       }
     } else {
@@ -982,8 +1000,8 @@ const submitPO = async () => {
         status: "Pending",
       });
 
-      // Convert the delivery date to Philippine time for immediate display
-      const phDeliveryDate = new Date(phDate.getTime() + 8 * 60 * 60 * 1000).toLocaleDateString();
+      // Format the delivery date using the same function used in the overlay
+      const formattedPhDate = formatDeliveryDateTime(formattedDeliveryDate);
 
       documents.value.push({
         id: record.id,
@@ -999,7 +1017,7 @@ const submitPO = async () => {
         address: record.address,
         tin_ID: record.tin_ID,
         modeofProcurement: record.modeofProcurement,
-        deliveryDate: phDeliveryDate,
+        deliveryDate: formattedPhDate || "",
       });
     }
 
@@ -1027,19 +1045,46 @@ const isModalOpen = ref(false);
 // Open modal function
 const openModal = async (order: Document) => {
   isOverlayOpen.value = true;
+  
+  // Format delivery date in Philippine time (keep this as is since it's working)
+  let formattedDeliveryDate = null;
+  if (order.deliveryDate) {
+    const date = new Date(order.deliveryDate);
+    const phDate = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+    formattedDeliveryDate = phDate.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true
+    });
+  }
+
+  // Format created date without adding 8 hours
+  const formattedCreatedDate = new Date(order.dateCreated).toLocaleString("en-US", {
+    month: "numeric",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true
+  });
+  
   selectedOrder.value = {
     id: order.id,
     orderNumber: order.orderNumber,
     trackingId: order.trackingId,
     handledBy: order.handledBy,
     createdBy: order.createdBy,
-    dateCreated: order.dateCreated,
+    dateCreated: formattedCreatedDate,
     status: order.status,
     supplierName: order.supplierName,
     address: order.address,
     tin_ID: order.tin_ID,
     modeofProcurement: order.modeofProcurement,
-    deliveryDate: order.deliveryDate || "", // Keep as ISO string
+    deliveryDate: formattedDeliveryDate || "",
     verifiedAt: order.verifiedAt,
     completedAt: order.completedAt,
     verificationEvents: order.verificationEvents || [],
@@ -1047,10 +1092,6 @@ const openModal = async (order: Document) => {
     updated: order.updated,
   };
   isModalOpen.value = true;
-
-  // if (!refreshInterval.value) {
-  //   startPolling();
-  // }
 };
 
 const closeModal = () => {
