@@ -71,6 +71,15 @@ interface Document {
   verificationEvents?: VerificationEvent[];
 }
 
+// Mark document as processed (no longer new)
+const markDocumentAsProcessed = (docId: string) => {
+  processedDocuments.value.add(docId);
+};
+
+const processedDocuments = ref<Set<string>>(new Set());
+
+
+
 //delivery time
 const formatDeliveryDateTime = (
   dateString: string | undefined | null
@@ -301,6 +310,8 @@ const startPolling = () => {
 
 const editSupplierInfo = async () => {
   if (!selectedOrder.value || !currentUser.value) return;
+  markDocumentAsProcessed(selectedOrder.value.id);
+  await fetchSelectedOrder();
 
   try {
     const modifierName =
@@ -386,6 +397,8 @@ const isAllowedRole = computed(() => {
 
 const verifyDocument = async () => {
   if (!selectedOrder.value || !currentUser.value) return;
+  markDocumentAsProcessed(selectedOrder.value.id);
+  await fetchSelectedOrder(); 
 
   const modifierName =
     currentUser.value?.name || currentUser.value?.email || "System";
@@ -1035,6 +1048,23 @@ const submitPO = async () => {
     return; // Stop if validation fails
   }
 
+  if (!isEditMode.value) {
+    try {
+      const existingRecord = await pb.collection("Collection_1").getFirstListItem(`Order_No = "${poNumber.value}"`);
+      if (existingRecord) {
+        alert(`Order Number "${poNumber.value}" already exists in the database.`);
+        return;
+      }
+    } catch (error) {
+      // Expected error when no record found - we want this case
+      if (error.status !== 404) {
+        console.error("Error checking for duplicates:", error);
+        alert("Error checking for existing orders. Please try again.");
+        return;
+      }
+    }
+  }
+
   // Convert Philippine time back to UTC before saving to PocketBase
   const phDate = new Date(deliveryDate.value);
   const utcDate = new Date(phDate.getTime() - 8 * 60 * 60 * 1000);
@@ -1538,38 +1568,41 @@ const fetchCurrentUser = async () => {
   }
 };
 
-onMounted(() => {
+onMounted(async () => {
+  await fetchDocuments();
+  documents.value.forEach(doc => {
+    // Mark as processed if:
+    // 1. Has verification events OR
+    // 2. Has been updated (different from creation time)
+    if ((doc.verificationEvents && doc.verificationEvents.length > 0) || 
+        (doc.updated && doc.updated !== doc.dateCreated)) {
+      processedDocuments.value.add(doc.id);
+    }
+  });
   fetchCurrentUser();
   startPolling();
+
 });
 
-// Add this to your script section
-const now = ref(new Date());
-const newDocumentThreshold = 5 * 60 * 1000; // 5 minutes in milliseconds
 
-// Update the current time every minute
-const updateNow = () => {
-  now.value = new Date();
-};
-const nowInterval = setInterval(updateNow, 60000);
-
-onUnmounted(() => {
-  clearInterval(nowInterval);
-});
 
 // Computed property to check if a document is new
 const isNewDocument = (doc: Document) => {
-  if (!doc.dateCreated) return false;
-  try {
-    const created = new Date(doc.dateCreated);
-    const nowTime = now.value.getTime();
-    const createdTime = created.getTime();
-    return nowTime - createdTime < newDocumentThreshold;
-  } catch (error) {
-    console.error("Invalid date:", doc.dateCreated, error);
+  // Never show for completed, lapsed, or already processed documents
+  if (doc.status === 'Completed' || 
+      doc.status === 'Lapsed' || 
+      doc.status === 'Needs Action' ||
+      processedDocuments.value.has(doc.id)) {
     return false;
   }
+
+  const hasNoEvents = 
+    (!doc.verificationEvents || doc.verificationEvents.length === 0);
+
+  return (doc.status === 'Pending' || doc.status === 'Verified') && hasNoEvents;
 };
+
+
 
 // onUnmounted(() => {
 //   stopPolling();
@@ -2013,7 +2046,7 @@ const isNewDocument = (doc: Document) => {
               </td>
 
               <!-- Order # Cell -->
-              <td class="p-3 text-left min-w-[120px]">
+              <td class="p-3 text-left min-w-[120px] wrap-text">
                 <a
                   href="#"
                   class="text-blue-600 hover:underline"
