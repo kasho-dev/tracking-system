@@ -22,8 +22,6 @@ import {
   ChevronDown,
 } from "lucide-vue-next";
 
-
-
 // Define the type for documents
 interface Document {
   id: string;
@@ -56,22 +54,26 @@ interface Document {
   verifiedBy?: string;
   verifiedByName?: string;
   completedAt?: string;
-  updatedAt?: string;
+  updated?: string;
 }
 
 //delivery time
-const formatDeliveryDateTime = (dateString: string | undefined | null): string | null => {
+const formatDeliveryDateTime = (
+  dateString: string | undefined | null
+): string | null => {
   if (!dateString) return null;
-  
+
   try {
     const date = new Date(dateString);
-    return date.toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
+    const phTime = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+    return phTime.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: "Asia/Manila",
     });
   } catch (error) {
     console.error("Error formatting date:", error);
@@ -80,14 +82,19 @@ const formatDeliveryDateTime = (dateString: string | undefined | null): string |
 };
 //delivery date restriction for create order
 const dateError = ref(false);
-const minDeliveryDate = ref(new Date().toISOString().slice(0, 16)); // Current date/time
+const minDeliveryDate = ref(() => {
+  const now = new Date();
+  // Convert to Philippine time (UTC+8)
+  const phTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  return phTime.toISOString().slice(0, 16);
+});
 
 const validateDeliveryDate = () => {
   if (!deliveryDate.value) {
     dateError.value = false;
     return false;
   }
-  
+
   const selectedDate = new Date(deliveryDate.value);
   const now = new Date();
   dateError.value = selectedDate <= now;
@@ -99,7 +106,7 @@ const shouldMarkAsLapsed = (doc: {
   deliveryDate: string;
   status: string;
   verificationEvents?: Array<{ type: string; timestamp: string }>;
-  updatedAt?: string;
+  updated?: string;
 }): boolean => {
   // Skip if already completed
   if (doc.status === "Completed") return false;
@@ -107,7 +114,7 @@ const shouldMarkAsLapsed = (doc: {
   // Skip if document has been updated after delivery date
   const deliveryDate = new Date(doc.deliveryDate);
   const today = new Date();
-  
+
   // For testing: 1 minute threshold (change to 5 days in production)
   const lapsedThreshold = new Date(deliveryDate.getTime() + 120000); // 1 minute
   // const lapsedThreshold = new Date(deliveryDate.getTime() + 5 * 24 * 60 * 60 * 1000); // 5 days
@@ -116,14 +123,11 @@ const shouldMarkAsLapsed = (doc: {
   if (today <= lapsedThreshold) return false;
 
   // Check if document is in Pending or Needs Action status
-  if (['Pending', 'Needs Action'].includes(doc.status)) return true;
-
+  if (["Pending", "Needs Action"].includes(doc.status)) return true;
 
   // Default case - no activity since delivery date
   return true;
 };
-
-
 
 const showPONumberError = ref(false);
 const showSupplierError = ref(false);
@@ -177,6 +181,14 @@ const fetchSelectedOrder = async () => {
       };
     });
 
+    // Convert UTC delivery date to Philippine time
+    let phDeliveryDate = "";
+    if (record.deliveryDate) {
+      const utcDate = new Date(record.deliveryDate);
+      const phTime = new Date(utcDate.getTime() + 8 * 60 * 60 * 1000);
+      phDeliveryDate = phTime.toLocaleDateString();
+    }
+
     selectedOrder.value = {
       ...selectedOrder.value,
       id: record.id,
@@ -196,9 +208,7 @@ const fetchSelectedOrder = async () => {
       address: record.address || "Unknown",
       tin_ID: record.tin_ID || "Unknown",
       modeofProcurement: record.modeofProcurement || "Unknown",
-      deliveryDate: record.deliveryDate
-        ? new Date(record.deliveryDate).toLocaleDateString()
-        : "",
+      deliveryDate: phDeliveryDate,
       completedAt: record.completedAt || selectedOrder.value.completedAt,
       verifiedAt: record.verifiedAt,
       verifiedBy: record.verifiedBy,
@@ -206,7 +216,7 @@ const fetchSelectedOrder = async () => {
         record.expand?.verifiedBy?.name ||
         record.expand?.verifiedBy?.email ||
         "System",
-      updatedAt: record.updatedAt,
+      updated: record.updated,
       verificationEvents,
     };
   } catch (error) {
@@ -273,7 +283,7 @@ const editSupplierInfo = async () => {
       deliveryDate: selectedOrder.value.deliveryDate,
       lastModifiedBy: currentUser.value.id,
       lastModifiedByName: modifierName,
-      updatedAt: new Date().toISOString(),
+      updated: new Date().toISOString(),
       verificationEvents: [
         ...(selectedOrder.value.verificationEvents || []),
         editEvent,
@@ -381,7 +391,7 @@ const verifyDocument = async () => {
         handledBy: modifierName, // Add this line
         lastModifiedBy: currentUser.value.id,
         lastModifiedByName: modifierName,
-        updatedAt: new Date().toISOString(),
+        updated: new Date().toISOString(),
         verifiedBy: userInfo.userId,
         verifiedByName: userInfo.userName,
       };
@@ -430,7 +440,7 @@ const verifyDocument = async () => {
       verifiedAt: verificationTimestamp,
       verifiedBy: userInfo.userId,
       verifiedByName: userInfo.userName,
-      updatedAt: verificationTimestamp,
+      updated: verificationTimestamp,
       handledBy: modifierName, // Add this line
       lastModifiedBy: currentUser.value.id, // Add this line
       lastModifiedByName: modifierName, // Add this line
@@ -507,7 +517,7 @@ const undoVerification = async () => {
       handledBy: modifierName, // Add this line
       lastModifiedBy: currentUser.value.id,
       lastModifiedByName: modifierName,
-      updatedAt: undoTimestamp,
+      updated: undoTimestamp,
     };
 
     // Update backend
@@ -593,7 +603,7 @@ const getVerificationTitle = (type: string): string => {
     final: "Final Verification",
     completed: "Document Completed",
     undo: "Cancelled Verification",
-     lapsed: "Document Lapsed",
+    lapsed: "Document Lapsed",
     edit: "Document Edited",
   };
   return titleMap[type] || "Verification Step";
@@ -730,9 +740,15 @@ const openEditModal = (order: Document) => {
   address.value = order.address;
   tin_ID.value = order.tin_ID;
   modeofProcurement.value = order.modeofProcurement;
-  deliveryDate.value = order.deliveryDate
-    ? formatDateForInput(order.deliveryDate)
-    : "";
+  
+  // Use the already converted Philippine time from selectedOrder
+  if (selectedOrder.value?.deliveryDate) {
+    const phDate = new Date(selectedOrder.value.deliveryDate);
+    deliveryDate.value = phDate.toISOString().slice(0, 16);
+  } else {
+    deliveryDate.value = "";
+  }
+  
   showModal.value = true;
   isOverlayMinimized.value = false; // Minimize overlay when edit starts
   isModalOpen.value = false; // Close the main overlay when editing
@@ -740,7 +756,9 @@ const openEditModal = (order: Document) => {
 
 const formatDateForInput = (dateString: string) => {
   const date = new Date(dateString);
-  return date.toISOString().slice(0, 16);
+  // Convert to Philippine time (UTC+8)
+  const phTime = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+  return phTime.toISOString().slice(0, 16);
 };
 
 // Add PO Document Modal
@@ -767,78 +785,81 @@ const fetchDocuments = async () => {
     const records = await pb.collection("Collection_1").getFullList({
       sort: "-created",
       expand:
-        "verifiedAt,completedAt,updatedAt,verifiedBy,verificationEvents.userId,createdBy,lastModifiedBy",
+        "verifiedAt,completedAt,updated,verifiedBy,verificationEvents.userId,createdBy",
     });
 
-    documents.value = await Promise.all(records.map(async (record) => {
-      const docData = {
-        deliveryDate: record.deliveryDate,
-        status: record.status,
-        verificationEvents: record.verificationEvents,
-        updatedAt: record.updatedAt
-      };
+    documents.value = await Promise.all(
+      records.map(async (record) => {
+        const docData = {
+          deliveryDate: record.deliveryDate,
+          status: record.status,
+          verificationEvents: record.verificationEvents,
+          updated: record.updated,
+        };
 
-      // Check if document should be marked as lapsed
-      let status = record.status;
-      if (shouldMarkAsLapsed(docData)) {
-        status = "Lapsed";
-        // Update in PocketBase if not already marked
-        if (record.status !== "Lapsed") {
-          try {
-            await pb.collection("Collection_1").update(record.id, { 
-              status: "Lapsed",
-              updatedAt: new Date().toISOString() 
-            });
-          } catch (error) {
-            console.error("Error updating document status:", error);
+        // Check if document should be marked as lapsed
+        let status = record.status;
+        if (shouldMarkAsLapsed(docData)) {
+          status = "Lapsed";
+          // Update in PocketBase if not already marked
+          if (record.status !== "Lapsed") {
+            try {
+              await pb.collection("Collection_1").update(record.id, {
+                status: "Lapsed",
+                updated: new Date().toISOString(),
+              });
+            } catch (error) {
+              console.error("Error updating document status:", error);
+            }
           }
         }
-      }
 
+        return {
+          id: record.id,
+          completedAt: record.completedAt,
+          orderNumber: `${record.Order_No}`,
+          trackingId: record.trackingId,
 
-      return {
-      id: record.id,
-      completedAt: record.completedAt,
-      orderNumber: `${record.Order_No}`,
-      trackingId: record.trackingId,
+          handledBy:
+            record.expand?.lastModifiedBy?.name ||
+            record.lastModifiedByName ||
+            record.expand?.verifiedBy?.name ||
+            record.expand?.createdBy?.name ||
+            record.createdByName ||
+            record.createdBy ||
+            "Unknown",
+          createdBy:
+            record.expand?.createdBy?.name ||
+            record.createdByName ||
+            record.createdBy ||
+            "System",
 
-      handledBy:
-        record.expand?.lastModifiedBy?.name ||
-        record.lastModifiedByName ||
-        record.expand?.verifiedBy?.name ||
-        record.expand?.createdBy?.name ||
-        "System",
-      createdBy:
-        record.expand?.createdBy?.name ||
-        record.createdByName ||
-        record.createdBy ||
-        "System",
-
-      createdByName: record.expand?.createdBy?.name || record.createdByName,
-      dateCreated: record.created, // Store as ISO string
-      // created: record.created,
-      status: record.status,
-      supplierName: record.supplierName,
-      address: record.address,
-      tin_ID: record.tin_ID,
-      modeofProcurement: record.modeofProcurement,
-      deliveryDate: record.deliveryDate,
-      verifiedAt: record.verifiedAt,
-      verifiedBy: record.verifiedBy,
-      verifiedByName:
-        record.expand?.verifiedBy?.name ||
-        record.expand?.verifiedBy?.email ||
-        "System",
-      updatedAt: record.updatedAt,
-      fileType: "xlsx",
-      verificationEvents: record.verificationEvents?.map((event: any) => ({
-        type: event.type,
-        timestamp: event.timestamp,
-        userId: event.userId,
-        userName: event.userName,
-      })),
-    };
-    }));
+          createdByName: record.expand?.createdBy?.name || record.createdByName,
+          dateCreated: record.created, // Store ISO string
+          created: record.created,
+          status: record.status,
+          supplierName: record.supplierName,
+          address: record.address,
+          tin_ID: record.tin_ID,
+          modeofProcurement: record.modeofProcurement,
+          deliveryDate: record.deliveryDate,
+          verifiedAt: record.verifiedAt,
+          verifiedBy: record.verifiedBy,
+          verifiedByName:
+            record.expand?.verifiedBy?.name ||
+            record.expand?.verifiedBy?.email ||
+            "System",
+          updated: record.updated,
+          fileType: "xlsx",
+          verificationEvents: record.verificationEvents?.map((event: any) => ({
+            type: event.type,
+            timestamp: event.timestamp,
+            userId: event.userId,
+            userName: event.userName,
+          })),
+        };
+      })
+    );
   } catch (error) {
     console.error("Error fetching documents:", error);
     alert("Failed to load documents. Please try again.");
@@ -847,12 +868,9 @@ const fetchDocuments = async () => {
 
 // Submit PO to Database
 const submitPO = async () => {
-
-    
-
   //reset validation first
   if (!validateDeliveryDate()) {
-    alert('Error: Delivery date must be in the future');
+    alert("Error: Delivery date must be in the future");
     return;
   }
   // Reset all errors first
@@ -900,9 +918,10 @@ const submitPO = async () => {
     return; // Stop if validation fails
   }
 
-  const formattedDeliveryDate = deliveryDate.value
-    ? new Date(deliveryDate.value).toISOString()
-    : "";
+  // Convert Philippine time back to UTC before saving to PocketBase
+  const phDate = new Date(deliveryDate.value);
+  const utcDate = new Date(phDate.getTime() - 8 * 60 * 60 * 1000);
+  const formattedDeliveryDate = utcDate.toISOString();
 
   // Get current user info
   const creatorId = currentUser.value?.id || "system";
@@ -919,18 +938,12 @@ const submitPO = async () => {
     address: address.value,
     tin_ID: tin_ID.value,
     modeofProcurement: modeofProcurement.value,
-    
-    deliveryDate: deliveryDate.value ? new Date(deliveryDate.value).toISOString() : "",
-
-    lastModifiedBy: modifierId,
-    lastModifiedByName: modifierName,
-    updatedAt: new Date().toISOString(),
+    deliveryDate: formattedDeliveryDate,
+    updated: new Date().toISOString(),
     createdBy: creatorId, // Store user ID
     createdByName: creatorName, // Store user name/email
-    
-    
   };
-  
+
   try {
     if (isEditMode.value && currentEditingId.value) {
       await pb.collection("Collection_1").update(currentEditingId.value, data);
@@ -959,22 +972,24 @@ const submitPO = async () => {
         };
       }
     } else {
-      // Create new document (existing code)
+      // Create new document
       const record = await pb.collection("Collection_1").create({
         ...data,
         trackingId: `seq${Math.floor(Math.random() * 1000000)}`,
         handledBy: creatorName,
         status: "Pending",
-        // createdBy and createdByName are already included in data
       });
+
+      // Convert the delivery date to Philippine time for immediate display
+      const phDeliveryDate = new Date(phDate.getTime() + 8 * 60 * 60 * 1000).toLocaleDateString();
 
       documents.value.push({
         id: record.id,
         orderNumber: `${record.Order_No}`,
         trackingId: record.trackingId,
         handledBy: record.handledBy,
-        createdBy: creatorName, // Use the name for display
-        createdByName: creatorName, // Store both
+        createdBy: creatorName,
+        createdByName: creatorName,
         dateCreated: new Date(record.created).toLocaleString(),
         status: record.status,
         fileType: "xlsx",
@@ -982,20 +997,16 @@ const submitPO = async () => {
         address: record.address,
         tin_ID: record.tin_ID,
         modeofProcurement: record.modeofProcurement,
-        deliveryDate: record.deliveryDate
-          ? new Date(record.deliveryDate).toLocaleDateString()
-          : "",
+        deliveryDate: phDeliveryDate,
       });
     }
 
-    // closeModalAdd();
-    // isOverlayMinimized.value = false; // Restore overlay after update
+    closeModalAdd();
+    isOverlayMinimized.value = false;
   } catch (error) {
     console.error("Error:", error);
     alert(`Failed to ${isEditMode.value ? "update" : "create"} order.`);
   }
-  closeModalAdd();
-  isOverlayMinimized.value = false; // Restore overlay after update
 };
 
 const activeButton = ref("Documents"); // Default active button
@@ -1026,14 +1037,12 @@ const openModal = async (order: Document) => {
     address: order.address,
     tin_ID: order.tin_ID,
     modeofProcurement: order.modeofProcurement,
-    deliveryDate: order.deliveryDate
-      ? new Date(order.deliveryDate).toLocaleDateString()
-      : "",
+    deliveryDate: order.deliveryDate || "", // Keep as ISO string
     verifiedAt: order.verifiedAt,
     completedAt: order.completedAt,
     verificationEvents: order.verificationEvents || [],
     fileType: order.fileType || "xlsx",
-    updatedAt: order.updatedAt,
+    updated: order.updated,
   };
   isModalOpen.value = true;
 
@@ -1255,7 +1264,6 @@ const filteredDocuments = computed(() => {
     filtered = filtered.filter(
       (doc) => doc.status === "Pending" || doc.status === "Verified"
     );
-
   } else if (activeButton.value === "Lapsed") {
     filtered = filtered.filter((doc) => doc.status === "Lapsed");
   }
@@ -1358,16 +1366,15 @@ onUnmounted(() => {
 });
 
 // Computed property to check if a document is new
-const isNewDocument = (dateCreated: string) => {
+const isNewDocument = (doc: Document) => {
+  if (!doc.dateCreated) return false;
   try {
-    const created = new Date(dateCreated);
-    if (isNaN(created.getTime())) {
-      console.warn(`Invalid dateCreated: ${dateCreated}`);
-      return false;
-    }
-    return now.value.getTime() - created.getTime() < newDocumentThreshold;
+    const created = new Date(doc.dateCreated);
+    const nowTime = now.value.getTime();
+    const createdTime = created.getTime();
+    return nowTime - createdTime < newDocumentThreshold;
   } catch (error) {
-    console.error(`Error parsing dateCreated: ${dateCreated}`, error);
+    console.error("Invalid date:", doc.dateCreated, error);
     return false;
   }
 };
@@ -1533,25 +1540,30 @@ const isNewDocument = (dateCreated: string) => {
                 </div>
 
                 <!-- Delivery Date -->
-                              <div>
-                <label class="block text-gray-400 text-sm mb-1">
-                  Delivery Date<span class="text-red-500">*</span>
-                </label>
-                <input
-                  v-model="deliveryDate"
-                  type="datetime-local"
-                  :min="minDeliveryDate"
-                  class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  :class="{ 'border-red-500': showDeliveryDateError || dateError }"
-                  @change="validateDeliveryDate"
-                />
-                <p v-if="showDeliveryDateError" class="text-red-500 text-xs mt-1">
-                  Delivery date is required
-                </p>
-                <p v-if="dateError" class="text-red-500 text-xs mt-1">
-                  Delivery date must be in the future
-                </p>
-              </div>
+                <div>
+                  <label class="block text-gray-400 text-sm mb-1">
+                    Delivery Date<span class="text-red-500">*</span>
+                  </label>
+                  <input
+                    v-model="deliveryDate"
+                    type="datetime-local"
+                    :min="minDeliveryDate"
+                    class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    :class="{
+                      'border-red-500': showDeliveryDateError || dateError,
+                    }"
+                    @change="validateDeliveryDate"
+                  />
+                  <p
+                    v-if="showDeliveryDateError"
+                    class="text-red-500 text-xs mt-1"
+                  >
+                    Delivery date is required
+                  </p>
+                  <p v-if="dateError" class="text-red-500 text-xs mt-1">
+                    Delivery date must be in the future
+                  </p>
+                </div>
               </div>
 
               <div class="flex justify-end gap-2 mt-6">
@@ -1608,48 +1620,48 @@ const isNewDocument = (dateCreated: string) => {
 
         <!-- Pending -->
         <div
-  @click="setActive('Pending')"
-  class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
-  :class="
-    activeButton === 'Pending'
-      ? 'bg-[#2E3347] text-purple-400'
-      : 'text-purple-400 hover:bg-[#2E3347]'
-  "
->
-  <span class="flex items-center gap-2"><Clock /> Pending</span>
-  <span class="text-white">{{ statusCounts.Pending || 0 }}</span>
-</div>
+          @click="setActive('Pending')"
+          class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
+          :class="
+            activeButton === 'Pending'
+              ? 'bg-[#2E3347] text-purple-400'
+              : 'text-purple-400 hover:bg-[#2E3347]'
+          "
+        >
+          <span class="flex items-center gap-2"><Clock /> Pending</span>
+          <span class="text-white">{{ statusCounts.Pending || 0 }}</span>
+        </div>
 
- <!-- Needs Action -->
- <div
-  @click="setActive('Needs Action')"
-  class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
-  :class="
-    activeButton === 'Needs Action'
-      ? 'bg-[#2E3347] text-yellow-400'
-      : 'text-yellow-400 hover:bg-[#2E3347]'
-  "
->
-  <span class="flex items-center gap-2"><User /> Needs Action</span>
-  <span class="text-white">{{ statusCounts['Needs Action'] || 0 }}</span>
-</div>
+        <!-- Needs Action -->
+        <div
+          @click="setActive('Needs Action')"
+          class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
+          :class="
+            activeButton === 'Needs Action'
+              ? 'bg-[#2E3347] text-yellow-400'
+              : 'text-yellow-400 hover:bg-[#2E3347]'
+          "
+        >
+          <span class="flex items-center gap-2"><User /> Needs Action</span>
+          <span class="text-white">{{
+            statusCounts["Needs Action"] || 0
+          }}</span>
+        </div>
 
         <!-- Lapsed -->
         <div
-  @click="setActive('Lapsed')"
-  class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
-  :class="
-    activeButton === 'Lapsed'
-      ? 'bg-[#2E3347] text-red-500'
-      : 'text-red-500 hover:bg-[#2E3347]'
-  "
->
-  <span class="flex items-center gap-2"><TriangleAlert /> Lapsed</span>
-  <span class="text-white">{{ statusCounts.Lapsed || 0 }}</span>
-</div>
-
-       
-</div>
+          @click="setActive('Lapsed')"
+          class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
+          :class="
+            activeButton === 'Lapsed'
+              ? 'bg-[#2E3347] text-red-500'
+              : 'text-red-500 hover:bg-[#2E3347]'
+          "
+        >
+          <span class="flex items-center gap-2"><TriangleAlert /> Lapsed</span>
+          <span class="text-white">{{ statusCounts.Lapsed || 0 }}</span>
+        </div>
+      </div>
       <!-- End of Sidebar Buttons -->
     </div>
 
@@ -1798,17 +1810,14 @@ const isNewDocument = (dateCreated: string) => {
               <!-- New document indicator (absolute positioned dot) -->
 
               <!-- Checkbox Cell -->
-              <td class="p-3 text-left w-12 relative">
+              <td class="w-12 p-3 text-left relative">
                 <input
                   type="checkbox"
-                  class="w-4 h-4"
+                  class="w-10 h-4"
                   :value="doc.id"
                   v-model="selectedDocuments"
                 />
-                <div
-                  v-if="isNewDocument(doc.dateCreated)"
-                  class="absolute left-8 top-1/2 -translate-y-1/2 w-2 h-2 bg-blue-500 rounded-full"
-                ></div>
+                <div v-if="isNewDocument(doc)"></div>
               </td>
 
               <!-- Order # Cell -->
@@ -1821,7 +1830,7 @@ const isNewDocument = (dateCreated: string) => {
                   {{ doc.orderNumber }}
                   <!-- New badge next to order number -->
                   <span
-                    v-if="isNewDocument(doc.dateCreated)"
+                    v-if="isNewDocument(doc)"
                     class="ml-2 px-1.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 rounded-full"
                   >
                     New
@@ -1833,14 +1842,16 @@ const isNewDocument = (dateCreated: string) => {
               <!-- Handled By Cell -->
               <td class="p-3 text-left min-w-[120px]">
                 {{ doc.handledBy }}
-                <div v-if="doc.updatedAt" class="text-xs text-gray-500"></div>
+                <div v-if="doc.updated" class="text-xs text-gray-500"></div>
               </td>
 
               <!-- Created By Cell -->
               <td class="p-3 text-left min-w-[120px]">{{ doc.createdBy }}</td>
 
               <!-- Date Created Cell -->
-              <td class="p-3 text-left min-w-[150px]">{{ doc.dateCreated }}</td>
+              <td class="p-3 text-left min-w-[150px]">
+                {{ new Date(doc.dateCreated).toLocaleString() }}
+              </td>
             </tr>
           </tbody>
         </table>
@@ -1913,7 +1924,8 @@ const isNewDocument = (dateCreated: string) => {
                       'bg-green-100 text-green-800':
                         selectedOrder?.status === 'Completed',
                       'bg-red-100 text-red-800':
-                        selectedOrder?.status === 'Needs Action' || selectedOrder?.status === 'Lapsed',
+                        selectedOrder?.status === 'Needs Action' ||
+                        selectedOrder?.status === 'Lapsed',
                       'bg-gray-100 text-gray-800': !selectedOrder?.status,
                     }"
                   >
@@ -1962,7 +1974,12 @@ const isNewDocument = (dateCreated: string) => {
                   <p class="text-gray-500">Mode of Procurement:</p>
                   <p>{{ selectedOrder?.modeofProcurement || "Not set" }}</p>
                   <p class="text-gray-500">Delivery Date:</p>
-                  <p>{{ formatDeliveryDateTime(selectedOrder?.deliveryDate) || "Not set" }}</p>
+                  <p>
+                    {{
+                      formatDeliveryDateTime(selectedOrder?.deliveryDate) ||
+                      "Not set"
+                    }}
+                  </p>
                 </div>
               </div>
 
