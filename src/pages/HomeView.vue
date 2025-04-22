@@ -71,18 +71,32 @@ interface Document {
   completedAt?: string;
   updated?: string;
   verificationEvents?: VerificationEvent[];
+  viewed?: boolean;
 }
 
 const clickedDocs = ref<Set<string>>(new Set());
 
-  const markAsClicked = (docId: string) => {
+const markAsClicked = async (docId: string) => {
   clickedDocs.value.add(docId);
+
+  // Update the "viewed" property in PocketBase
+  try {
+    const docIndex = documents.value.findIndex((doc) => doc.id === docId);
+    if (docIndex !== -1 && !documents.value[docIndex].viewed) {
+      documents.value[docIndex] = {
+        ...documents.value[docIndex],
+        viewed: true,
+      };
+      await pb.collection("Collection_1").update(docId, { viewed: true });
+    }
+  } catch (error) {
+    console.error("Error updating viewed status:", error);
+  }
 };
 
 // Computed property to check if a document is new
 const isNewDocument = (doc: Document) => {
-  return !clickedDocs.value.has(doc.id) && 
-         (doc.status === 'Pending' || doc.status === 'Verified');
+  return !doc.viewed && (doc.status === "Pending" || doc.status === "Verified");
 };
 
 
@@ -1001,6 +1015,7 @@ const fetchDocuments = async () => {
             userName: event.userName,
             modifiedFields: event.modifiedFields || {} // Add this line to preserve modifiedFields
           })),
+          viewed: record.viewed || false,
         };
       })
     );
@@ -1207,6 +1222,7 @@ const submitPO = async () => {
         tin_ID: record.tin_ID,
         modeofProcurement: record.modeofProcurement,
         deliveryDate: formattedPhDate || "",
+        viewed: false,
       });
     }
 
@@ -1260,6 +1276,7 @@ const openModal = async (order: Document) => {
     verificationEvents: order.verificationEvents || [],
     fileType: order.fileType || "xlsx",
     updated: order.updated,
+    viewed: order.viewed || false,
   };
   isModalOpen.value = true;
 };
