@@ -22,6 +22,8 @@ import {
   ChevronDown,
 } from "lucide-vue-next";
 
+
+
 // Define the type for documents
 interface FieldChange {
   changed: boolean;
@@ -1601,6 +1603,7 @@ const isNewDocument = (doc: Document) => {
 
   return (doc.status === 'Pending' || doc.status === 'Verified') && hasNoEvents;
 };
+
 
 
 
