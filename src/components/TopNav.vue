@@ -29,7 +29,7 @@ const isSignupPage = computed(() => route.path === '/signup');
 const isSettingsPage = computed(() => route.path === '/settings');
 
 // Check if current route is dashboard/home page
-const isDashboardPage = computed(() => route.path === '/');
+const isDashboardPage = computed(() => route.path === '/home');
 
 // Check authentication status
 const isAuthenticated = computed(() => pb.authStore.isValid);
@@ -67,7 +67,7 @@ const handleLogout = async () => {
 
 // Handle navigation to dashboard/home
 const navigateToDashboard = () => {
-  router.push('/');
+  router.push('/home');
   isDropdownOpen.value = false;
 };
 

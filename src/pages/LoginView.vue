@@ -198,7 +198,7 @@ export default {
         console.log('Login successful!', authData);
         
         // Redirect to dashboard or home page after successful login
-        this.$router.push('/'); // Change this to your desired route
+        this.$router.push('/home'); // Change this to your desired route
         
       } catch (error) {
         console.error('Login failed:', error);
@@ -219,7 +219,22 @@ export default {
   mounted() {
     // Check if user is already authenticated
     if (this.pb.authStore.isValid) {
-      this.$router.push('/'); // Redirect to dashboard if already logged in
+      this.$router.push('/home'); // Redirect to dashboard if already logged in
+      return;
+    }
+    
+    // Check for credentials from signup
+    const newUserEmail = sessionStorage.getItem('newUserEmail');
+    const newUserPassword = sessionStorage.getItem('newUserPassword');
+    
+    if (newUserEmail && newUserPassword) {
+      // Populate the login form with credentials from signup
+      this.email = newUserEmail;
+      this.password = newUserPassword;
+      
+      // Remove the stored credentials for security
+      sessionStorage.removeItem('newUserEmail');
+      sessionStorage.removeItem('newUserPassword');
     }
     
     // Try to restore authentication from storage
@@ -228,7 +243,7 @@ export default {
       try {
         this.pb.authStore.import(JSON.parse(authData));
         if (this.pb.authStore.isValid) {
-          this.$router.push('/');
+          this.$router.push('/home');
         }
       } catch (e) {
         console.error('Failed to restore auth:', e);

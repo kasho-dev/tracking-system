@@ -92,17 +92,25 @@
           >
             <div class="space-y-2">
               <label for="department" class="block text-sm font-medium text-gray-700">Department</label>
-              <select
-                id="department"
-                v-model="department"
-                required
-                class="w-full px-4 py-3 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-              >
-                <option value="" disabled>Select your department</option>
-                <option value="Consumer Protection Division">Consumer Protection Division</option>
-                <option value="Finance Division">Finance Division</option>
-                <option value="Business Division">Business Division</option>
-              </select>
+              <div class="relative">
+                <select
+                  id="department"
+                  v-model="department"
+                  required
+                  class="w-full appearance-none px-4 py-3 pr-8 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                >
+                  <option value="" disabled>Select your department</option>
+                  <option value="Consumer Protection Division">Consumer Protection Division</option>
+                  <option value="Finance Division">Finance Division</option>
+                  <option value="Business Division">Business Division</option>
+                </select>
+                <!-- Custom dropdown arrow with proper positioning -->
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                  </svg>
+                </div>
+              </div>
               <p v-if="departmentError" class="text-sm text-red-600">{{ departmentError }}</p>
             </div>
           </transition>
@@ -350,8 +358,16 @@ export default {
           role: 'user'
         });
         
+        // Save credentials before displaying success message
+        const savedEmail = this.email;
+        const savedPassword = this.password;
+        
         // Display success message
         this.successMessage = 'Account created successfully! You can now sign in with your credentials.';
+        
+        // Store credentials in sessionStorage for login page to use
+        sessionStorage.setItem('newUserEmail', savedEmail);
+        sessionStorage.setItem('newUserPassword', savedPassword);
         
         // Reset form
         this.name = '';
@@ -390,7 +406,7 @@ export default {
   // Redirect if already logged in
   mounted() {
     if (this.pb.authStore.isValid) {
-      this.router.push('/');
+      this.router.push('/home');
     }
   }
 }
