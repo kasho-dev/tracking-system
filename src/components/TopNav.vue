@@ -4,7 +4,7 @@ import { Toolbar } from "primevue";
 import PocketBase from 'pocketbase';
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { User, Settings, LogOut } from 'lucide-vue-next';
+import { User, Settings, LogOut, LayoutDashboard } from 'lucide-vue-next';
 
 const pb = new PocketBase('http://127.0.0.1:8090');
 const searchStore = useSearchStore();
@@ -14,11 +14,20 @@ const route = useRoute();
 // Check if current route is login page
 const isLoginPage = computed(() => route.path === '/login');
 
+// Check if current route is settings page
+const isSettingsPage = computed(() => route.path === '/settings');
+
+// Check if current route is dashboard/home page
+const isDashboardPage = computed(() => route.path === '/');
+
 // Check authentication status
 const isAuthenticated = computed(() => pb.authStore.isValid);
 
 // Only show nav when authenticated AND not on login page
 const showNav = computed(() => isAuthenticated.value && !isLoginPage.value);
+
+// Only show search when not on settings page
+const showSearch = computed(() => !isSettingsPage.value);
 
 // User dropdown state
 const isDropdownOpen = ref(false);
@@ -43,6 +52,12 @@ const handleLogout = async () => {
   } catch (error) {
     console.error('Logout failed:', error);
   }
+};
+
+// Handle navigation to dashboard/home
+const navigateToDashboard = () => {
+  router.push('/');
+  isDropdownOpen.value = false;
 };
 
 // Handle settings navigation
@@ -82,8 +97,8 @@ onBeforeUnmount(() => {
           Welcome, {{ pb.authStore.model?.name || 'User' }}!
         </div>
 
-        <!-- Search Input -->
-        <div class="relative mt-3 group">
+        <!-- Search Input - Hidden on settings page -->
+        <div v-if="showSearch" class="relative mt-3 group">
           <input
             v-model="searchStore.searchQuery"
             type="text"
@@ -118,27 +133,48 @@ onBeforeUnmount(() => {
           </div>
 
           <!-- Dropdown menu -->
-          <div 
-            v-if="isDropdownOpen"
-            class="absolute right-0 top-full mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200"
+          <transition 
+            name="dropdown"
+            enter-active-class="transition duration-200 ease-out"
+            enter-from-class="transform scale-95 opacity-0"
+            enter-to-class="transform scale-100 opacity-100"
+            leave-active-class="transition duration-150 ease-in"
+            leave-from-class="transform scale-100 opacity-100"
+            leave-to-class="transform scale-95 opacity-0"
           >
-            <a 
-              href="#"
-              @click.prevent="navigateToSettings"
-              class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+            <div 
+              v-if="isDropdownOpen"
+              class="absolute right-0 top-full mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200"
             >
-              <Settings class="w-4 h-4 mr-2" />
-              Settings
-            </a>
-            <a 
-              href="#"
-              @click.prevent="handleLogout"
-              class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-            >
-              <LogOut class="w-4 h-4 mr-2" />
-              Logout
-            </a>
-          </div>
+              <a 
+                href="#"
+                @click.prevent="navigateToDashboard"
+                class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                :class="{ 'bg-gray-50': isDashboardPage }"
+              >
+                <LayoutDashboard class="w-4 h-4 mr-2" />
+                Dashboard
+              </a>
+              <a 
+                href="#"
+                @click.prevent="navigateToSettings"
+                class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                :class="{ 'bg-gray-50': isSettingsPage }"
+              >
+                <Settings class="w-4 h-4 mr-2" />
+                Settings
+              </a>
+              <div class="border-t border-gray-100 my-1"></div>
+              <a 
+                href="#"
+                @click.prevent="handleLogout"
+                class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+              >
+                <LogOut class="w-4 h-4 mr-2" />
+                Logout
+              </a>
+            </div>
+          </transition>
         </div>
       </div>
     </template>

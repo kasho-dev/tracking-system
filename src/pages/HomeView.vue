@@ -1626,479 +1626,524 @@ const areDatesEqual = (date1: string | undefined | null, date2: string | undefin
 <template>
   <body class="bg-[#0A0E1A] flex flex-grow p-4">
     <!-- Add PO Document Button -->
-    <div class="sidebar w-64 bg-[#0A0E1A] text-white mr-4 rounded-lg">
-      <button
-        @click="openModalAdd"
-        class="w-full flex items-center justify-center gap-2 bg-[#6A5CFE] text-white text-sm font-semibold py-3 rounded-xl hover:bg-[#7C6CFF] active:bg-[#5A4BD9] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 ease-out"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          class="text-white"
+    <transition
+      appear
+      enter-active-class="transition-all duration-500 ease-out"
+      enter-from-class="opacity-0 transform -translate-x-10"
+      enter-to-class="opacity-100 transform translate-x-0"
+    >
+      <div class="sidebar w-64 bg-[#0A0E1A] text-white mr-4 rounded-lg">
+        <button
+          @click="openModalAdd"
+          class="w-full flex items-center justify-center gap-2 bg-[#6A5CFE] text-white text-sm font-semibold py-3 rounded-xl hover:bg-[#7C6CFF] active:bg-[#5A4BD9] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 ease-out"
         >
-          <path d="M13.234 20.252 21 12.3" />
-          <path
-            d="m16 6-8.414 8.586a2 2 0 0 0 0 2.828 2 2 0 0 0 2.828 0l8.414-8.586a4 4 0 0 0 0-5.656 4 4 0 0 0-5.656 0l-8.415 8.585a6 6 0 1 0 8.486 8.486"
-          />
-        </svg>
-        Add Purchasing Order
-      </button>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="text-white"
+          >
+            <path d="M13.234 20.252 21 12.3" />
+            <path
+              d="m16 6-8.414 8.586a2 2 0 0 0 0 2.828 2 2 0 0 0 2.828 0l8.414-8.586a4 4 0 0 0 0-5.656 4 4 0 0 0-5.656 0l-8.415 8.585a6 6 0 1 0 8.486 8.486"
+            />
+          </svg>
+          Add Purchasing Order
+        </button>
 
-      <!-- Modal Transition -->
-      <Transition
-        enter-active-class="transition duration-300 ease-out"
-        enter-from-class="opacity-0"
-        enter-to-class="opacity-100"
-        leave-active-class="transition duration-200 ease-in"
-        leave-from-class="opacity-100"
-        leave-to-class="opacity-0"
-      >
-        <div
-          v-if="showModal"
-          class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50"
-          @click.self="closeModalAdd"
+        <!-- Modal Transition -->
+        <transition
+          enter-active-class="transition duration-300 ease-out"
+          enter-from-class="opacity-0"
+          enter-to-class="opacity-100"
+          leave-active-class="transition duration-200 ease-in"
+          leave-from-class="opacity-100"
+          leave-to-class="opacity-0"
         >
-          <Transition
-            enter-active-class="transition duration-300 ease-out"
-            enter-from-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-            enter-to-class="opacity-100 translate-y-0 sm:scale-100"
-            leave-active-class="transition duration-200 ease-in"
-            leave-from-class="opacity-100 translate-y-0 sm:scale-100"
-            leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+          <div
+            v-if="showModal"
+            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50"
+            @click.self="closeModalAdd"
+          >
+            <transition
+              enter-active-class="transition duration-300 ease-out"
+              enter-from-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+              enter-to-class="opacity-100 translate-y-0 sm:scale-100"
+              leave-active-class="transition duration-200 ease-in"
+              leave-from-class="opacity-100 translate-y-0 sm:scale-100"
+              leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+            >
+              <div
+                v-if="showModal"
+                class="bg-[#0B132B] p-6 rounded-lg shadow-md w-96 mx-4"
+                @click.stop
+              >
+                <h2 class="text-lg font-semibold mb-4 text-white text-center">
+                  {{
+                    isEditMode ? "Edit Supplier Information" : "Enter PO Number"
+                  }}
+                  <!-- Enter PO Number -->
+                </h2>
+
+                <div class="space-y-4">
+                  <!-- PO Number Field (Required + 50 char limit) -->
+                  <div>
+                    <label class="block text-gray-400 text-sm mb-1">
+                      Work Order # <span class="text-red-500">*</span>
+                    </label>
+                    <input
+                      v-model="poNumber"
+                      type="text"
+                      placeholder="eg. APO2025-2024"
+                      maxlength="50"
+                      required
+                      class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      :class="{ 'border-red-500': showPONumberError }"
+                    />
+                    <p v-if="showPONumberError" class="text-red-500 text-xs mt-1">
+                      PO Number is required (max 50 characters)
+                    </p>
+                    <p class="text-gray-500 text-xs mt-1">
+                      {{ poNumber.length }}/50 characters
+                    </p>
+                  </div>
+
+                  <div>
+                    <label class="block text-gray-400 text-sm mb-1">
+                      Supplier Name <span class="text-red-500">*</span>
+                    </label>
+                    <input
+                      v-model="supplierName"
+                      type="text"
+                      placeholder="John Pork"
+                      required
+                      class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      :class="{ 'border-red-500': showSupplierError }"
+                    />
+                    <p v-if="showSupplierError" class="text-red-500 text-xs mt-1">
+                      Supplier Name is required
+                    </p>
+                  </div>
+
+                  <!-- Address -->
+                  <div>
+                    <label class="block text-gray-400 text-sm mb-1"
+                      >Address<span class="text-red-500">*</span></label
+                    >
+                    <input
+                      v-model="address"
+                      type="text"
+                      placeholder="Legazpi City, Albay"
+                      class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      :class="{ 'border-red-500': showSupplierError }"
+                    />
+                    <p v-if="showSupplierError" class="text-red-500 text-xs mt-1">
+                      Address is required
+                    </p>
+                  </div>
+
+                  <!-- TIN ID -->
+                  <div>
+                    <label class="block text-gray-400 text-sm mb-1"
+                      >TIN ID<span class="text-red-500">*</span></label
+                    >
+                    <input
+                      v-model="tin_ID"
+                      type="text"
+                      placeholder="716-412-421 VAT"
+                      class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      :class="{ 'border-red-500': showSupplierError }"
+                    />
+                    <p v-if="showSupplierError" class="text-red-500 text-xs mt-1">
+                      TIN ID is required
+                    </p>
+                  </div>
+
+                  <!-- Mode of Procurement -->
+                  <div>
+                    <label class="block text-gray-400 text-sm mb-1"
+                      >Mode of Procurement<span class="text-red-500"
+                        >*</span
+                      ></label
+                    >
+                    <input
+                      v-model="modeofProcurement"
+                      type="text"
+                      placeholder="Small Value Procurement"
+                      class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      :class="{ 'border-red-500': showSupplierError }"
+                    />
+                    <p v-if="showSupplierError" class="text-red-500 text-xs mt-1">
+                      Mode of Procurement is required
+                    </p>
+                  </div>
+
+                  <!-- Delivery Date -->
+                  <div>
+                    <label class="block text-gray-400 text-sm mb-1">
+                      Delivery Date<span class="text-red-500">*</span>
+                    </label>
+                    <input
+                      v-model="deliveryDate"
+                      type="datetime-local"
+                      :min="minDeliveryDate"
+                      class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      :class="{
+                        'border-red-500': showDeliveryDateError || dateError,
+                      }"
+                      @change="validateDeliveryDate"
+                    />
+                    <p
+                      v-if="showDeliveryDateError"
+                      class="text-red-500 text-xs mt-1"
+                    >
+                      Delivery date is required
+                    </p>
+                    <p v-if="dateError" class="text-red-500 text-xs mt-1">
+                      Delivery date must be in the future
+                    </p>
+                  </div>
+                </div>
+
+                <div class="flex justify-end gap-2 mt-6">
+                  <button
+                    @click="closeModalAdd"
+                    class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    @click="submitPO"
+                    class="px-4 py-2 bg-[#6A5CFE] text-white rounded-md hover:bg-[#7C6CFF] transition-colors"
+                  >
+                    {{ isEditMode ? "Update Order" : "Create Order" }}
+                  </button>
+                </div>
+              </div>
+            </transition>
+          </div>
+        </transition>
+
+        <!--Sidebar Buttons-->
+        <div class="sidebar-buttons mt-4 space-y-2">
+          <!-- Documents (All) -->
+          <transition
+            appear
+            enter-active-class="transition-all duration-500 ease-out"
+            enter-from-class="opacity-0 transform -translate-x-10"
+            enter-to-class="opacity-100 transform translate-x-0"
           >
             <div
-              v-if="showModal"
-              class="bg-[#0B132B] p-6 rounded-lg shadow-md w-96 mx-4"
-              @click.stop
+              @click="setActive('Documents')"
+              class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
+              :class="
+                activeButton === 'Documents'
+                  ? 'bg-[#2E3347] text-purple-400'
+                  : 'text-purple-400 hover:bg-[#2E3347]'
+              "
             >
-              <h2 class="text-lg font-semibold mb-4 text-white text-center">
-                {{
-                  isEditMode ? "Edit Supplier Information" : "Enter PO Number"
-                }}
-                <!-- Enter PO Number -->
-              </h2>
-
-              <div class="space-y-4">
-                <!-- PO Number Field (Required + 50 char limit) -->
-                <div>
-                  <label class="block text-gray-400 text-sm mb-1">
-                    Work Order # <span class="text-red-500">*</span>
-                  </label>
-                  <input
-                    v-model="poNumber"
-                    type="text"
-                    placeholder="eg. APO2025-2024"
-                    maxlength="50"
-                    required
-                    class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    :class="{ 'border-red-500': showPONumberError }"
-                  />
-                  <p v-if="showPONumberError" class="text-red-500 text-xs mt-1">
-                    PO Number is required (max 50 characters)
-                  </p>
-                  <p class="text-gray-500 text-xs mt-1">
-                    {{ poNumber.length }}/50 characters
-                  </p>
-                </div>
-
-                <div>
-                  <label class="block text-gray-400 text-sm mb-1">
-                    Supplier Name <span class="text-red-500">*</span>
-                  </label>
-                  <input
-                    v-model="supplierName"
-                    type="text"
-                    placeholder="John Pork"
-                    required
-                    class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    :class="{ 'border-red-500': showSupplierError }"
-                  />
-                  <p v-if="showSupplierError" class="text-red-500 text-xs mt-1">
-                    Supplier Name is required
-                  </p>
-                </div>
-
-                <!-- Address -->
-                <div>
-                  <label class="block text-gray-400 text-sm mb-1"
-                    >Address<span class="text-red-500">*</span></label
-                  >
-                  <input
-                    v-model="address"
-                    type="text"
-                    placeholder="Legazpi City, Albay"
-                    class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    :class="{ 'border-red-500': showSupplierError }"
-                  />
-                  <p v-if="showSupplierError" class="text-red-500 text-xs mt-1">
-                    Address is required
-                  </p>
-                </div>
-
-                <!-- TIN ID -->
-                <div>
-                  <label class="block text-gray-400 text-sm mb-1"
-                    >TIN ID<span class="text-red-500">*</span></label
-                  >
-                  <input
-                    v-model="tin_ID"
-                    type="text"
-                    placeholder="716-412-421 VAT"
-                    class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    :class="{ 'border-red-500': showSupplierError }"
-                  />
-                  <p v-if="showSupplierError" class="text-red-500 text-xs mt-1">
-                    TIN ID is required
-                  </p>
-                </div>
-
-                <!-- Mode of Procurement -->
-                <div>
-                  <label class="block text-gray-400 text-sm mb-1"
-                    >Mode of Procurement<span class="text-red-500"
-                      >*</span
-                    ></label
-                  >
-                  <input
-                    v-model="modeofProcurement"
-                    type="text"
-                    placeholder="Small Value Procurement"
-                    class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    :class="{ 'border-red-500': showSupplierError }"
-                  />
-                  <p v-if="showSupplierError" class="text-red-500 text-xs mt-1">
-                    Mode of Procurement is required
-                  </p>
-                </div>
-
-                <!-- Delivery Date -->
-                <div>
-                  <label class="block text-gray-400 text-sm mb-1">
-                    Delivery Date<span class="text-red-500">*</span>
-                  </label>
-                  <input
-                    v-model="deliveryDate"
-                    type="datetime-local"
-                    :min="minDeliveryDate"
-                    class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    :class="{
-                      'border-red-500': showDeliveryDateError || dateError,
-                    }"
-                    @change="validateDeliveryDate"
-                  />
-                  <p
-                    v-if="showDeliveryDateError"
-                    class="text-red-500 text-xs mt-1"
-                  >
-                    Delivery date is required
-                  </p>
-                  <p v-if="dateError" class="text-red-500 text-xs mt-1">
-                    Delivery date must be in the future
-                  </p>
-                </div>
-              </div>
-
-              <div class="flex justify-end gap-2 mt-6">
-                <button
-                  @click="closeModalAdd"
-                  class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  @click="submitPO"
-                  class="px-4 py-2 bg-[#6A5CFE] text-white rounded-md hover:bg-[#7C6CFF] transition-colors"
-                >
-                  {{ isEditMode ? "Update Order" : "Create Order" }}
-                </button>
-              </div>
+              <span class="flex items-center gap-2 sidebar-button-content">
+                <File />
+                <span class="sidebar-button-text">All</span>
+              </span>
+              <span class="text-white">{{ documents.length }}</span>
             </div>
-          </Transition>
-        </div>
-      </Transition>
+          </transition>
 
-      <!--Sidebar Buttons-->
-      <div class="sidebar-buttons mt-4 space-y-2">
-        <!-- Documents (All) -->
-        <div
-          @click="setActive('Documents')"
-          class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
-          :class="
-            activeButton === 'Documents'
-              ? 'bg-[#2E3347] text-purple-400'
-              : 'text-purple-400 hover:bg-[#2E3347]'
-          "
-        >
-          <span class="flex items-center gap-2 sidebar-button-content">
-            <File />
-            <span class="sidebar-button-text">All</span>
-          </span>
-          <span class="text-white">{{ documents.length }}</span>
-        </div>
+          <!-- Completed -->
+          <transition
+            appear
+            enter-active-class="transition-all duration-500 ease-out"
+            enter-from-class="opacity-0 transform -translate-x-10"
+            enter-to-class="opacity-100 transform translate-x-0"
+          >
+            <div
+              @click="setActive('Completed')"
+              class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer font-semibold transition-all duration-300 ease-in-out hover:translate-x-2"
+              :class="
+                activeButton === 'Completed'
+                  ? 'bg-[#2E3347] text-green-400'
+                  : 'text-green-400 hover:bg-[#2E3347]'
+              "
+            >
+              <span class="flex items-center gap-2"><Check /> Completed</span>
+              <span class="text-white">{{ statusCounts.Completed || 0 }}</span>
+            </div>
+          </transition>
 
-        <!-- Completed -->
-        <div
-          @click="setActive('Completed')"
-          class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer font-semibold transition-all duration-300 ease-in-out hover:translate-x-2"
-          :class="
-            activeButton === 'Completed'
-              ? 'bg-[#2E3347] text-green-400'
-              : 'text-green-400 hover:bg-[#2E3347]'
-          "
-        >
-          <span class="flex items-center gap-2"><Check /> Completed</span>
-          <span class="text-white">{{ statusCounts.Completed || 0 }}</span>
-        </div>
+          <!-- Pending -->
+          <transition
+            appear
+            enter-active-class="transition-all duration-500 ease-out"
+            enter-from-class="opacity-0 transform -translate-x-10"
+            enter-to-class="opacity-100 transform translate-x-0"
+          >
+            <div
+              @click="setActive('Pending')"
+              class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
+              :class="
+                activeButton === 'Pending'
+                  ? 'bg-[#2E3347] text-purple-400'
+                  : 'text-purple-400 hover:bg-[#2E3347]'
+              "
+            >
+              <span class="flex items-center gap-2"><Clock /> Pending</span>
+              <span class="text-white">{{ statusCounts.Pending || 0 }}</span>
+            </div>
+          </transition>
 
-        <!-- Pending -->
-        <div
-          @click="setActive('Pending')"
-          class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
-          :class="
-            activeButton === 'Pending'
-              ? 'bg-[#2E3347] text-purple-400'
-              : 'text-purple-400 hover:bg-[#2E3347]'
-          "
-        >
-          <span class="flex items-center gap-2"><Clock /> Pending</span>
-          <span class="text-white">{{ statusCounts.Pending || 0 }}</span>
-        </div>
+          <!-- Needs Action -->
+          <transition
+            appear
+            enter-active-class="transition-all duration-500 ease-out"
+            enter-from-class="opacity-0 transform -translate-x-10"
+            enter-to-class="opacity-100 transform translate-x-0"
+          >
+            <div
+              @click="setActive('Needs Action')"
+              class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
+              :class="
+                activeButton === 'Needs Action'
+                  ? 'bg-[#2E3347] text-yellow-400'
+                  : 'text-yellow-400 hover:bg-[#2E3347]'
+              "
+            >
+              <span class="flex items-center gap-2"><User /> Needs Action</span>
+              <span class="text-white">{{
+                statusCounts["Needs Action"] || 0
+              }}</span>
+            </div>
+          </transition>
 
-        <!-- Needs Action -->
-        <div
-          @click="setActive('Needs Action')"
-          class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
-          :class="
-            activeButton === 'Needs Action'
-              ? 'bg-[#2E3347] text-yellow-400'
-              : 'text-yellow-400 hover:bg-[#2E3347]'
-          "
-        >
-          <span class="flex items-center gap-2"><User /> Needs Action</span>
-          <span class="text-white">{{
-            statusCounts["Needs Action"] || 0
-          }}</span>
+          <!-- Lapsed -->
+          <transition
+            appear
+            enter-active-class="transition-all duration-500 ease-out"
+            enter-from-class="opacity-0 transform -translate-x-10"
+            enter-to-class="opacity-100 transform translate-x-0"
+          >
+            <div
+              @click="setActive('Lapsed')"
+              class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
+              :class="
+                activeButton === 'Lapsed'
+                  ? 'bg-[#2E3347] text-red-500'
+                  : 'text-red-500 hover:bg-[#2E3347]'
+              "
+            >
+              <span class="flex items-center gap-2"><TriangleAlert /> Lapsed</span>
+              <span class="text-white">{{ statusCounts.Lapsed || 0 }}</span>
+            </div>
+          </transition>
         </div>
-
-        <!-- Lapsed -->
-        <div
-          @click="setActive('Lapsed')"
-          class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
-          :class="
-            activeButton === 'Lapsed'
-              ? 'bg-[#2E3347] text-red-500'
-              : 'text-red-500 hover:bg-[#2E3347]'
-          "
-        >
-          <span class="flex items-center gap-2"><TriangleAlert /> Lapsed</span>
-          <span class="text-white">{{ statusCounts.Lapsed || 0 }}</span>
-        </div>
+        <!-- End of Sidebar Buttons -->
       </div>
-      <!-- End of Sidebar Buttons -->
-    </div>
+    </transition>
 
     <!-- Data Table -->
-    <div class="p-6 flex-grow bg-white rounded-lg shadow-md">
-      <h1 class="text-2xl font-bold mb-4">
-        <span>
-          {{ activeButton.toUpperCase() }}
-          <span v-if="activeButton.toUpperCase() !== 'DOCUMENTS'"
-            >DOCUMENT</span
-          >
-        </span>
-      </h1>
-
-      <!-- Action Buttons with Lucide Icons -->
-      <div class="flex space-x-4 mb-4">
-        <button
-          class="p-2 bg-gray-100 rounded hover:bg-green-500 transition"
-          @click="downloadSelectedDocuments"
-        >
-          <Download />
-        </button>
-        <button
-          class="p-2 bg-gray-100 rounded hover:bg-red-500 transition"
-          @click="confirmDelete"
-          :disabled="currentUser?.role === 'user'"
-          :class="{
-            'opacity-50 cursor-not-allowed': currentUser?.role === 'user',
-            'hover:bg-red-500': currentUser?.role !== 'user',
-          }"
-        >
-          <Trash />
-        </button>
-
-        <!-- <button class="p-2 bg-gray-100 rounded hover:bg-gray-300 transition">
-          <Ellipsis />
-        </button> -->
-      </div>
-
-      <!-- Table Header (Fixed) -->
-      <div class="border rounded-t-lg bg-gray-100">
-        <table class="w-full border-collapse">
-          <thead>
-            <tr class="text-gray-600 text-sm">
-              <!-- Checkbox Column -->
-              <th class="w-12 p-3 text-left">
-                <input
-                  type="checkbox"
-                  class="w-10 h-4"
-                  :checked="areAllSelected"
-                  @change="toggleAllSelection"
-                />
-              </th>
-
-              <!-- Order # Column -->
-              <th
-                class="p-3 text-left cursor-pointer min-w-[120px]"
-                @click="toggleSort('orderNumber')"
-              >
-                <div class="flex items-center gap-1">
-                  <span>Order #</span>
-                  <ChevronsUpDown
-                    v-if="sortField !== 'orderNumber'"
-                    class="h-4 w-4 text-gray-400"
-                  />
-                  <ChevronUp
-                    v-else-if="sortDirection === 'asc'"
-                    class="h-4 w-4 text-gray-600"
-                  />
-                  <ChevronDown v-else class="h-4 w-4 text-gray-600" />
-                </div>
-              </th>
-
-              <!-- Handled By Column -->
-              <th
-                class="p-3 text-left cursor-pointer min-w-[120px]"
-                @click="toggleSort('handledBy')"
-              >
-                <div class="flex items-center gap-1">
-                  <span>Handled by</span>
-                  <ChevronsUpDown
-                    v-if="sortField !== 'handledBy'"
-                    class="h-4 w-4 text-gray-400"
-                  />
-                  <ChevronUp
-                    v-else-if="sortDirection === 'asc'"
-                    class="h-4 w-4 text-gray-600"
-                  />
-                  <ChevronDown v-else class="h-4 w-4 text-gray-600" />
-                </div>
-              </th>
-
-              <!-- Created By Column -->
-              <th
-                class="p-3 text-left cursor-pointer min-w-[120px]"
-                @click="toggleSort('createdBy')"
-              >
-                <div class="flex items-center gap-1">
-                  <span>Created by</span>
-                  <ChevronsUpDown
-                    v-if="sortField !== 'createdBy'"
-                    class="h-4 w-4 text-gray-400"
-                  />
-                  <ChevronUp
-                    v-else-if="sortDirection === 'asc'"
-                    class="h-4 w-4 text-gray-600"
-                  />
-                  <ChevronDown v-else class="h-4 w-4 text-gray-600" />
-                </div>
-              </th>
-
-              <!-- Date Created Column -->
-              <th
-                class="p-3 text-left cursor-pointer min-w-[150px]"
-                @click="toggleSort('dateCreated')"
-              >
-                <div class="flex items-center gap-1">
-                  <span>Date Created</span>
-                  <ChevronsUpDown
-                    v-if="sortField !== 'dateCreated'"
-                    class="h-4 w-4 text-gray-400"
-                  />
-                  <ChevronUp
-                    v-else-if="sortDirection === 'asc'"
-                    class="h-4 w-4 text-gray-600"
-                  />
-                  <ChevronDown v-else class="h-4 w-4 text-gray-600" />
-                </div>
-              </th>
-            </tr>
-          </thead>
-        </table>
-      </div>
-
-      <!-- Table Body -->
-      <div
-        class="border border-t-0 rounded-b-lg overflow-auto w-full max-h-[450px]"
-      >
-        <table class="w-full border-collapse bg-white">
-          <tbody>
-            <tr
-              v-for="doc in sortedDocuments"
-              :key="doc.id"
-              class="border-b hover:bg-gray-200 text-sm relative"
+    <transition
+      appear
+      enter-active-class="transition-all duration-700 ease-out"
+      enter-from-class="opacity-0 transform translate-y-10"
+      enter-to-class="opacity-100 transform translate-y-0"
+    >
+      <div class="p-6 flex-grow bg-white rounded-lg shadow-md">
+        <h1 class="text-2xl font-bold mb-4">
+          <span>
+            {{ activeButton.toUpperCase() }}
+            <span v-if="activeButton.toUpperCase() !== 'DOCUMENTS'"
+              >DOCUMENT</span
             >
-              <!-- New document indicator (absolute positioned dot) -->
+          </span>
+        </h1>
 
-              <!-- Checkbox Cell -->
-              <td class="w-12 p-3 text-left relative">
-                <input
-                  type="checkbox"
-                  class="w-10 h-4"
-                  :value="doc.id"
-                  v-model="selectedDocuments"
-                />
-                <div v-if="isNewDocument(doc)"></div>
-              </td>
+        <!-- Action Buttons with Lucide Icons -->
+        <div class="flex space-x-4 mb-4">
+          <button
+            class="p-2 bg-gray-100 rounded hover:bg-green-500 transition-all duration-300 hover:shadow-md hover:shadow-green-200"
+            @click="downloadSelectedDocuments"
+          >
+            <Download />
+          </button>
+          <button
+            class="p-2 bg-gray-100 rounded hover:bg-red-500 transition-all duration-300 hover:shadow-md hover:shadow-red-200"
+            @click="confirmDelete"
+            :disabled="currentUser?.role === 'user'"
+            :class="{
+              'opacity-50 cursor-not-allowed': currentUser?.role === 'user',
+              'hover:bg-red-500': currentUser?.role !== 'user',
+            }"
+          >
+            <Trash />
+          </button>
+        </div>
 
-              <!-- Order # Cell -->
-              <td class="p-3 text-left min-w-[120px] wrap-text">
-                <a
-                  href="#"
-                  class="text-blue-600 hover:underline"
-                  @click.prevent="openModal(doc)"
+        <!-- Table Header (Fixed) -->
+        <div class="border rounded-t-lg bg-gray-100">
+          <table class="w-full border-collapse">
+            <thead>
+              <tr class="text-gray-600 text-sm">
+                <!-- Checkbox Column -->
+                <th class="w-12 p-3 text-left">
+                  <input
+                    type="checkbox"
+                    class="w-10 h-4"
+                    :checked="areAllSelected"
+                    @change="toggleAllSelection"
+                  />
+                </th>
+
+                <!-- Order # Column -->
+                <th
+                  class="p-3 text-left cursor-pointer min-w-[120px]"
+                  @click="toggleSort('orderNumber')"
                 >
-                  {{ doc.orderNumber }}
-                  <!-- New badge next to order number -->
-                  <span
-                    v-if="isNewDocument(doc)"
-                    class="ml-2 px-1.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 rounded-full"
+                  <div class="flex items-center gap-1">
+                    <span>Order #</span>
+                    <ChevronsUpDown
+                      v-if="sortField !== 'orderNumber'"
+                      class="h-4 w-4 text-gray-400"
+                    />
+                    <ChevronUp
+                      v-else-if="sortDirection === 'asc'"
+                      class="h-4 w-4 text-gray-600"
+                    />
+                    <ChevronDown v-else class="h-4 w-4 text-gray-600" />
+                  </div>
+                </th>
+
+                <!-- Handled By Column -->
+                <th
+                  class="p-3 text-left cursor-pointer min-w-[120px]"
+                  @click="toggleSort('handledBy')"
+                >
+                  <div class="flex items-center gap-1">
+                    <span>Handled by</span>
+                    <ChevronsUpDown
+                      v-if="sortField !== 'handledBy'"
+                      class="h-4 w-4 text-gray-400"
+                    />
+                    <ChevronUp
+                      v-else-if="sortDirection === 'asc'"
+                      class="h-4 w-4 text-gray-600"
+                    />
+                    <ChevronDown v-else class="h-4 w-4 text-gray-600" />
+                  </div>
+                </th>
+
+                <!-- Created By Column -->
+                <th
+                  class="p-3 text-left cursor-pointer min-w-[120px]"
+                  @click="toggleSort('createdBy')"
+                >
+                  <div class="flex items-center gap-1">
+                    <span>Created by</span>
+                    <ChevronsUpDown
+                      v-if="sortField !== 'createdBy'"
+                      class="h-4 w-4 text-gray-400"
+                    />
+                    <ChevronUp
+                      v-else-if="sortDirection === 'asc'"
+                      class="h-4 w-4 text-gray-600"
+                    />
+                    <ChevronDown v-else class="h-4 w-4 text-gray-600" />
+                  </div>
+                </th>
+
+                <!-- Date Created Column -->
+                <th
+                  class="p-3 text-left cursor-pointer min-w-[150px]"
+                  @click="toggleSort('dateCreated')"
+                >
+                  <div class="flex items-center gap-1">
+                    <span>Date Created</span>
+                    <ChevronsUpDown
+                      v-if="sortField !== 'dateCreated'"
+                      class="h-4 w-4 text-gray-400"
+                    />
+                    <ChevronUp
+                      v-else-if="sortDirection === 'asc'"
+                      class="h-4 w-4 text-gray-600"
+                    />
+                    <ChevronDown v-else class="h-4 w-4 text-gray-600" />
+                  </div>
+                </th>
+              </tr>
+            </thead>
+          </table>
+        </div>
+
+        <!-- Table Body -->
+        <div
+          class="border border-t-0 rounded-b-lg overflow-auto w-full max-h-[450px]"
+        >
+          <table class="w-full border-collapse bg-white">
+            <tbody>
+              <tr
+                v-for="(doc, index) in sortedDocuments"
+                :key="doc.id"
+                class="border-b hover:bg-gray-200 text-sm relative"
+              >
+                <!-- New document indicator (absolute positioned dot) -->
+
+                <!-- Checkbox Cell -->
+                <td class="w-12 p-3 text-left relative">
+                  <input
+                    type="checkbox"
+                    class="w-10 h-4"
+                    :value="doc.id"
+                    v-model="selectedDocuments"
+                  />
+                  <div v-if="isNewDocument(doc)"></div>
+                </td>
+
+                <!-- Order # Cell -->
+                <td class="p-3 text-left min-w-[120px] wrap-text">
+                  <a
+                    href="#"
+                    class="text-blue-600 hover:underline"
+                    @click.prevent="openModal(doc)"
                   >
-                    New
-                  </span>
-                </a>
-                <div class="text-xs text-gray-500">{{ doc.trackingId }}</div>
-              </td>
+                    {{ doc.orderNumber }}
+                    <!-- New badge next to order number -->
+                    <span
+                      v-if="isNewDocument(doc)"
+                      class="ml-2 px-1.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 rounded-full"
+                    >
+                      New
+                    </span>
+                  </a>
+                  <div class="text-xs text-gray-500">{{ doc.trackingId }}</div>
+                </td>
 
-              <!-- Handled By Cell -->
-              <td class="p-3 text-left min-w-[120px]">
-                {{ doc.handledBy }}
-                <div v-if="doc.updated" class="text-xs text-gray-500"></div>
-              </td>
+                <!-- Handled By Cell -->
+                <td class="p-3 text-left min-w-[120px]">
+                  {{ doc.handledBy }}
+                  <div v-if="doc.updated" class="text-xs text-gray-500"></div>
+                </td>
 
-              <!-- Created By Cell -->
-              <td class="p-3 text-left min-w-[120px]">{{ doc.createdBy }}</td>
+                <!-- Created By Cell -->
+                <td class="p-3 text-left min-w-[120px]">{{ doc.createdBy }}</td>
 
-              <!-- Date Created Cell -->
-              <td class="p-3 text-left min-w-[150px]">
-                {{ new Date(doc.dateCreated).toLocaleString() }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                <!-- Date Created Cell -->
+                <td class="p-3 text-left min-w-[150px]">
+                  {{ new Date(doc.dateCreated).toLocaleString() }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
+    </transition>
 
     <!-- Overlay -->
-    <Transition
+    <transition
       enter-active-class="transition duration-300 ease-out"
       enter-from-class="opacity-0"
       enter-to-class="opacity-100"
@@ -2111,7 +2156,7 @@ const areDatesEqual = (date1: string | undefined | null, date2: string | undefin
         class="fixed inset-0 bg-black bg-opacity-50 flex justify-end z-50"
         @click.self="closeModal"
       >
-        <Transition
+        <transition
           enter-active-class="transition duration-300 ease-out transform"
           enter-from-class="translate-x-full"
           enter-to-class="translate-x-0"
