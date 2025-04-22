@@ -90,7 +90,6 @@ const formatDeliveryDateTime = (
 
   try {
     const date = new Date(dateString);
-    // Instead of adding 8 hours, use the timeZone option to format in Philippine time
     return date.toLocaleString("en-US", {
       month: "short",
       day: "numeric",
@@ -177,6 +176,43 @@ const searchStore = useSearchStore(); // ✅ Initialize store
 const isOverlayOpen = ref(false);
 const isOverlayMinimized = ref(false);
 
+// Add this new function after formatDeliveryDateTime
+const formatEditedDateTime = (
+  dateString: string | undefined | null,
+  isCreatedDate: boolean = false
+): string => {
+  if (!dateString) return '';
+
+  try {
+    const date = new Date(dateString);
+    // For created dates, don't add timezone offset
+    if (isCreatedDate) {
+      return date.toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true
+      });
+    }
+    // For delivery dates, add timezone offset
+    const phDate = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+    return phDate.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true
+    });
+  } catch (error) {
+    console.error("Error formatting date:", error);
+    return '';
+  }
+};
+
+// Modify the fetchSelectedOrder function to use the new formatEditedDateTime
 const fetchSelectedOrder = async () => {
   if (!selectedOrder.value) return;
 
@@ -206,31 +242,9 @@ const fetchSelectedOrder = async () => {
       };
     });
 
-    // Format delivery date in Philippine time (keep this as is since it's working)
-    let formattedDeliveryDate = null;
-    if (record.deliveryDate) {
-      const date = new Date(record.deliveryDate);
-      const phDate = new Date(date.getTime() + 8 * 60 * 60 * 1000);
-      formattedDeliveryDate = phDate.toLocaleString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true
-      });
-    }
-
-    // Format created date without adding 8 hours
-    const formattedCreatedDate = new Date(record.created).toLocaleString("en-US", {
-      month: "numeric",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: true
-    });
+    // Format dates using the new function
+    const formattedDeliveryDate = formatEditedDateTime(record.deliveryDate);
+    const formattedCreatedDate = formatEditedDateTime(record.created, true);
 
     selectedOrder.value = {
       ...selectedOrder.value,
@@ -251,7 +265,7 @@ const fetchSelectedOrder = async () => {
         record.createdBy ||
         "System",
       createdByName: record.expand?.createdBy?.name || record.createdByName,
-      dateCreated: formattedCreatedDate,
+      dateCreated: formattedCreatedDate || "",
       status: record.status || "Unknown",
       fileType: record.fileType || "xlsx",
       supplierName: record.supplierName || "Unknown1",
@@ -1057,9 +1071,9 @@ const submitPO = async () => {
         alert(`Order Number "${poNumber.value}" already exists in the database.`);
         return;
       }
-    } catch (error) {
+    } catch (error: any) {
       // Expected error when no record found - we want this case
-      if (error.status !== 404) {
+      if (error?.status !== 404) {
         console.error("Error checking for duplicates:", error);
         alert("Error checking for existing orders. Please try again.");
         return;
@@ -1133,15 +1147,11 @@ const submitPO = async () => {
               newValue: modeofProcurement.value
             },
             deliveryDate: {
-              changed: selectedOrder.value?.deliveryDate ? 
-                (() => {
-                  const newDate = new Date(formattedDeliveryDate);
-                  const oldDate = new Date(selectedOrder.value.deliveryDate);
-                  return newDate.getTime() !== oldDate.getTime();
-                })() : 
-                false,
-              oldValue: selectedOrder.value?.deliveryDate,
-              newValue: formattedDeliveryDate
+              changed: !areDatesEqual(formattedDeliveryDate, selectedOrder.value?.deliveryDate),
+              oldValue: selectedOrder.value?.deliveryDate ? 
+                formatDeliveryDateTime(selectedOrder.value.deliveryDate) || undefined : 
+                undefined,
+              newValue: formatDeliveryDateTime(formattedDeliveryDate) || ''
             }
           }
         }
@@ -1227,31 +1237,11 @@ const isModalOpen = ref(false);
 const openModal = async (order: Document) => {
   isOverlayOpen.value = true;
   
-  // Format delivery date in Philippine time (keep this as is since it's working)
-  let formattedDeliveryDate = null;
-  if (order.deliveryDate) {
-    const date = new Date(order.deliveryDate);
-    const phDate = new Date(date.getTime() + 8 * 60 * 60 * 1000);
-    formattedDeliveryDate = phDate.toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true
-    });
-  }
-
-  // Format created date without adding 8 hours
-  const formattedCreatedDate = new Date(order.dateCreated).toLocaleString("en-US", {
-    month: "numeric",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true
-  });
+  // Format delivery date using the new function
+  let formattedDeliveryDate = formatEditedDateTime(order.deliveryDate);
+  
+  // Format created date using the new function with isCreatedDate flag
+  const formattedCreatedDate = formatEditedDateTime(order.dateCreated, true);
   
   selectedOrder.value = {
     id: order.id,
@@ -1259,7 +1249,7 @@ const openModal = async (order: Document) => {
     trackingId: order.trackingId,
     handledBy: order.handledBy,
     createdBy: order.createdBy,
-    dateCreated: formattedCreatedDate,
+    dateCreated: formattedCreatedDate || "",
     status: order.status,
     supplierName: order.supplierName,
     address: order.address,
@@ -1610,6 +1600,27 @@ const isNewDocument = (doc: Document) => {
 // onUnmounted(() => {
 //   stopPolling();
 // });
+
+// Add a standardized date comparison function
+const areDatesEqual = (date1: string | undefined | null, date2: string | undefined | null): boolean => {
+  if (!date1 || !date2) return date1 === date2;
+  
+  try {
+    // Parse both dates and set time components to zeros to compare only date portions
+    const d1 = new Date(date1);
+    const d2 = new Date(date2);
+    
+    // Compare year, month, day, hours and minutes only
+    return d1.getFullYear() === d2.getFullYear() &&
+           d1.getMonth() === d2.getMonth() &&
+           d1.getDate() === d2.getDate() &&
+           d1.getHours() === d2.getHours() &&
+           d1.getMinutes() === d2.getMinutes();
+  } catch (error) {
+    console.error("Error comparing dates:", error);
+    return false;
+  }
+};
 </script>
 
 <template>
