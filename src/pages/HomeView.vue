@@ -23,17 +23,38 @@ import {
 } from "lucide-vue-next";
 
 // Define the type for documents
+interface FieldChange {
+  changed: boolean;
+  oldValue?: string;
+  newValue: string;
+}
+
+interface ModifiedFields {
+  orderNumber?: FieldChange;
+  supplierName?: FieldChange;
+  address?: FieldChange;
+  tin_ID?: FieldChange;
+  modeofProcurement?: FieldChange;
+  deliveryDate?: FieldChange;
+}
+
+interface VerificationEvent {
+  type: string;
+  timestamp: string;
+  userId: string;
+  userName: string;
+  modifiedFields?: ModifiedFields;
+}
+
 interface Document {
   id: string;
   orderNumber: string;
   trackingId: string;
-
   handledBy: string;
   createdBy: string;
-  createdByName?: string; // User's display name (optional)
+  createdByName?: string;
   lastModifiedBy?: string;
   lastModifiedByName?: string;
-
   dateCreated: string;
   status: string;
   fileType?: string;
@@ -42,19 +63,12 @@ interface Document {
   tin_ID: string;
   modeofProcurement: string;
   deliveryDate: string;
-
-  verificationEvents?: Array<{
-    type: string; // 'initial', 'acknowledgement', 'final'
-    timestamp: string;
-    userId: string;
-    userName: string;
-  }>;
-
   verifiedAt?: string;
   verifiedBy?: string;
   verifiedByName?: string;
   completedAt?: string;
   updated?: string;
+  verificationEvents?: VerificationEvent[];
 }
 
 //delivery time
@@ -574,28 +588,77 @@ const undoVerification = async () => {
 };
 
 // Timeline Events Handler
+interface TimelineEvent {
+  title: string;
+  description: string;
+  time: string;
+  modifiedFields?: Array<{
+    field: string;
+    oldValue: string;
+    newValue: string;
+  }>;
+  eventId?: string;
+}
+
+// Add this near the top with other ref declarations
+const expandedStates = ref<Record<string, boolean>>({});
+
+// Update the events computed property
 const events = computed(() => {
   if (!selectedOrder.value) return [];
 
-  const timelineEvents = [
+  const timelineEvents: TimelineEvent[] = [
     {
       title: "Document Created",
-      description: `Created by ${
+      description: `Created by <span class="username">${
         selectedOrder.value.createdByName ||
         selectedOrder.value.createdBy ||
         "System"
-      }`,
+      }</span>`,
       time: formatTimestamp(selectedOrder.value.dateCreated),
     },
   ];
 
   if (selectedOrder.value.verificationEvents) {
     selectedOrder.value.verificationEvents.forEach((event) => {
-      timelineEvents.push({
-        title: getVerificationTitle(event.type),
-        description: `Action by ${event.userName || "Unknown"}`,
-        time: formatTimestamp(event.timestamp),
-      });
+      if (event.type === "modify") {
+        const modifiedFields = Object.entries(event.modifiedFields || {})
+          .filter(([_, details]) => details.changed)
+          .map(([field, details]) => {
+            const fieldNames: Record<string, string> = {
+              orderNumber: "Work Order #",
+              supplierName: "Supplier Name",
+              address: "Address",
+              tin_ID: "TIN ID",
+              modeofProcurement: "Mode of Procurement",
+              deliveryDate: "Delivery Date"
+            };
+            return {
+              field: fieldNames[field] || field,
+              oldValue: details.oldValue || 'empty',
+              newValue: details.newValue || 'empty'
+            };
+          });
+
+        const eventId = event.timestamp; // Use timestamp as unique ID
+        if (!(eventId in expandedStates.value)) {
+          expandedStates.value[eventId] = false;
+        }
+
+        timelineEvents.push({
+          title: getVerificationTitle(event.type),
+          description: `Modified by <span class="username">${event.userName || "Unknown"}</span>`,
+          time: formatTimestamp(event.timestamp),
+          modifiedFields,
+          eventId
+        });
+      } else {
+        timelineEvents.push({
+          title: getVerificationTitle(event.type),
+          description: `Action by <span class="username">${event.userName || "Unknown"}</span>`,
+          time: formatTimestamp(event.timestamp),
+        });
+      }
     });
   }
 
@@ -608,11 +671,11 @@ const events = computed(() => {
     if (completionTime) {
       timelineEvents.push({
         title: "Document Completed",
-        description: `Completed by ${
+        description: `Completed by <span class="username">${
           selectedOrder.value.verificationEvents?.find(
             (event) => event.type === "final"
           )?.userName || "Unknown"
-        }`,
+        }</span>`,
         time: formatTimestamp(completionTime),
       });
     }
@@ -620,6 +683,24 @@ const events = computed(() => {
 
   return timelineEvents;
 });
+
+// Update the toggle function
+const toggleFieldChanges = (eventId: string) => {
+  expandedStates.value[eventId] = !expandedStates.value[eventId];
+};
+
+// Update the TimelineEvent interface
+interface TimelineEvent {
+  title: string;
+  description: string;
+  time: string;
+  modifiedFields?: Array<{
+    field: string;
+    oldValue: string;
+    newValue: string;
+  }>;
+  eventId?: string;
+}
 
 // Helper function for verification titles
 const getVerificationTitle = (type: string): string => {
@@ -631,6 +712,7 @@ const getVerificationTitle = (type: string): string => {
     undo: "Cancelled Verification",
     lapsed: "Document Lapsed",
     edit: "Document Edited",
+    modify: "Document Modified"
   };
   return titleMap[type] || "Verification Step";
 };
@@ -684,29 +766,29 @@ const formatTimestamp = (timestamp: string) => {
 // End of Timeline Script
 
 // Store the user data
-const tassadarUser = ref<any>(null);
+// const tassadarUser = ref<any>(null);
 
-// Fetch the user by email or ID
-const fetchTassadarUser = async () => {
-  try {
-    // METHOD 1: Get by email (if you know it)
-    tassadarUser.value = await pb
-      .collection("users")
-      .getFirstListItem('email="logangster86@gmail.com"');
+// // Fetch the user by email or ID
+// const fetchTassadarUser = async () => {
+//   try {
+//     // METHOD 1: Get by email (if you know it)
+//     tassadarUser.value = await pb
+//       .collection("users")
+//       .getFirstListItem('email="logangster86@gmail.com"');
 
-    // OR METHOD 2: Get by ID (from your screenshot)
-    // tassadarUser.value = await pb.collection('users').getOne("Rigm2021984p");
+//     // OR METHOD 2: Get by ID (from your screenshot)
+//     // tassadarUser.value = await pb.collection('users').getOne("Rigm2021984p");
 
-    console.log("Fetched user:", tassadarUser.value);
-  } catch (error) {
-    console.error("Error fetching user:", error);
-    // Fallback to hardcoded name if fetch fails
-    tassadarUser.value = { name: "tassadar" };
-  }
-};
+//     console.log("Fetched user:", tassadarUser.value);
+//   } catch (error) {
+//     console.error("Error fetching user:", error);
+//     // Fallback to hardcoded name if fetch fails
+//     tassadarUser.value = { name: "tassadar" };
+//   }
+// };
 
-// Call this when your component mounts
-fetchTassadarUser();
+// // Call this when your component mounts
+// fetchTassadarUser();
 
 // Sorting Table
 const sortField = ref("dateCreated");
@@ -771,12 +853,14 @@ const openEditModal = (order: Document) => {
   if (order.deliveryDate) {
     const date = new Date(order.deliveryDate);
     const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const month = date.getMonth();
+    const day = date.getDate();
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
     
-    deliveryDate.value = `${year}-${month}-${day}T${hours}:${minutes}`;
+    // Convert to UTC for the input
+    const utcDate = new Date(Date.UTC(year, month, day, hours, minutes));
+    deliveryDate.value = utcDate.toISOString().slice(0, 16);
   } else {
     deliveryDate.value = "";
   }
@@ -888,6 +972,7 @@ const fetchDocuments = async () => {
             timestamp: event.timestamp,
             userId: event.userId,
             userName: event.userName,
+            modifiedFields: event.modifiedFields || {} // Add this line to preserve modifiedFields
           })),
         };
       })
@@ -981,7 +1066,54 @@ const submitPO = async () => {
     ...(isEditMode.value ? {
       lastModifiedBy: currentUser.value?.id || "system",
       lastModifiedByName: currentUser.value?.name || currentUser.value?.email || "System",
-      handledBy: currentUser.value?.name || currentUser.value?.email || "System"
+      handledBy: currentUser.value?.name || currentUser.value?.email || "System",
+      verificationEvents: [
+        ...(selectedOrder.value?.verificationEvents || []),
+        {
+          type: "modify",
+          timestamp: new Date().toISOString(),
+          userId: currentUser.value?.id || "system",
+          userName: currentUser.value?.name || currentUser.value?.email || "System",
+          modifiedFields: {
+            orderNumber: {
+              changed: poNumber.value !== selectedOrder.value?.orderNumber,
+              oldValue: selectedOrder.value?.orderNumber,
+              newValue: poNumber.value
+            },
+            supplierName: {
+              changed: supplierName.value !== selectedOrder.value?.supplierName,
+              oldValue: selectedOrder.value?.supplierName,
+              newValue: supplierName.value
+            },
+            address: {
+              changed: address.value !== selectedOrder.value?.address,
+              oldValue: selectedOrder.value?.address,
+              newValue: address.value
+            },
+            tin_ID: {
+              changed: tin_ID.value !== selectedOrder.value?.tin_ID,
+              oldValue: selectedOrder.value?.tin_ID,
+              newValue: tin_ID.value
+            },
+            modeofProcurement: {
+              changed: modeofProcurement.value !== selectedOrder.value?.modeofProcurement,
+              oldValue: selectedOrder.value?.modeofProcurement,
+              newValue: modeofProcurement.value
+            },
+            deliveryDate: {
+              changed: selectedOrder.value?.deliveryDate ? 
+                (() => {
+                  const newDate = new Date(formattedDeliveryDate);
+                  const oldDate = new Date(selectedOrder.value.deliveryDate);
+                  return newDate.getTime() !== oldDate.getTime();
+                })() : 
+                false,
+              oldValue: selectedOrder.value?.deliveryDate,
+              newValue: formattedDeliveryDate
+            }
+          }
+        }
+      ]
     } : {})
   };
 
@@ -2049,13 +2181,43 @@ const isNewDocument = (doc: Document) => {
                   <template #content="slotProps">
                     <div class="timeline-item">
                       <strong>{{ slotProps.item.title }}</strong>
-                      <div v-if="slotProps.item.action">
-                        {{ slotProps.item.action }}
+                      <div class="event-description" v-html="slotProps.item.description"></div>
+                      <div v-if="slotProps.item.modifiedFields" class="mt-2">
+                        <button 
+                          @click="toggleFieldChanges(slotProps.item.eventId!)"
+                          class="text-sm text-purple-400 hover:text-purple-300 flex items-center gap-1"
+                        >
+                          <span>{{ expandedStates[slotProps.item.eventId!] ? 'Hide Changes' : 'Show Changes' }}</span>
+                          <svg 
+                            xmlns="http://www.w3.org/2000/svg" 
+                            width="16" 
+                            height="16" 
+                            viewBox="0 0 24 24" 
+                            fill="none" 
+                            stroke="currentColor" 
+                            stroke-width="2" 
+                            stroke-linecap="round" 
+                            stroke-linejoin="round"
+                            :class="{ 'transform rotate-180': expandedStates[slotProps.item.eventId!] }"
+                          >
+                            <path d="m6 9 6 6 6-6"/>
+                          </svg>
+                        </button>
+                        <div v-if="expandedStates[slotProps.item.eventId!]" class="mt-2 space-y-2">
+                          <div v-for="(field, index) in slotProps.item.modifiedFields" :key="index" class="p-2 bg-gray-800 rounded">
+                            <div class="text-sm font-medium">{{ field.field }}</div>
+                            <div class="flex items-center gap-2 mt-1">
+                              <span class="text-red-400 text-sm">From:</span>
+                              <span class="text-red-300">{{ field.oldValue }}</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                              <span class="text-green-400 text-sm">To:</span>
+                              <span class="text-green-300">{{ field.newValue }}</span>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <div>{{ slotProps.item.description }}</div>
-                      <small class="text-gray-500">{{
-                        slotProps.item.time
-                      }}</small>
+                      <small class="text-gray-500">{{ slotProps.item.time }}</small>
                     </div>
                   </template>
                 </Timeline>
@@ -2209,6 +2371,8 @@ const isNewDocument = (doc: Document) => {
 .timeline-item {
   text-align: left;
   margin-left: 0;
+  white-space: pre-line;  /* Add this line to respect line breaks */
+  margin-bottom: 1.5rem;  /* Add space after each timeline item */
 }
 
 .timeline-title {
@@ -2361,5 +2525,52 @@ tbody tr:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.timeline-item {
+  text-align: left;
+  margin-left: 0;
+  white-space: pre-line;
+  margin-bottom: 1.5rem;
+  background-color: #1A1F36;
+  padding: 1rem;
+  border-radius: 0.5rem;
+}
+
+.timeline-item strong {
+  color: #E5E7EB;
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.timeline-item .event-description {
+  color: #9CA3AF;
+}
+
+.timeline-item .event-description :deep(strong) {
+  color: #6A5CFE;
+  font-weight: 600;
+}
+
+.timeline-item .event-description :deep(span.username) {
+  color: #60A5FA;
+  font-weight: 500;
+}
+
+.timeline-item small {
+  display: block;
+  margin-top: 0.5rem;
+  color: #9CA3AF;
+}
+
+/* Add transition for the dropdown */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>
