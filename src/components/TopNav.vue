@@ -11,8 +11,19 @@ const searchStore = useSearchStore();
 const router = useRouter();
 const route = useRoute();
 
+// User avatar URL
+const userAvatarUrl = computed(() => {
+  if (pb.authStore.model?.avatar) {
+    return pb.files.getUrl(pb.authStore.model, pb.authStore.model.avatar);
+  }
+  return null;
+});
+
 // Check if current route is login page
 const isLoginPage = computed(() => route.path === '/login');
+
+// Check if current route is signup page
+const isSignupPage = computed(() => route.path === '/signup');
 
 // Check if current route is settings page
 const isSettingsPage = computed(() => route.path === '/settings');
@@ -23,8 +34,8 @@ const isDashboardPage = computed(() => route.path === '/');
 // Check authentication status
 const isAuthenticated = computed(() => pb.authStore.isValid);
 
-// Only show nav when authenticated AND not on login page
-const showNav = computed(() => isAuthenticated.value && !isLoginPage.value);
+// Only show nav when authenticated AND not on login or signup pages
+const showNav = computed(() => isAuthenticated.value && !isLoginPage.value && !isSignupPage.value);
 
 // Only show search when not on settings page
 const showSearch = computed(() => !isSettingsPage.value);
@@ -126,10 +137,16 @@ onBeforeUnmount(() => {
         <!-- User icon with dropdown -->
         <div class="relative user-icon">
           <div 
-            class="p-2 rounded-full bg-gray-700 hover:bg-gray-600 transition cursor-pointer"
+            class="cursor-pointer"
             @click="toggleDropdown"
           >
-            <User class="w-5 h-5" />
+            <!-- Show profile image if available, otherwise show User icon -->
+            <div v-if="userAvatarUrl" class="w-10 h-10 rounded-full overflow-hidden border-2 border-gray-200 hover:border-white transition">
+              <img :src="userAvatarUrl" alt="Profile" class="w-full h-full object-cover" />
+            </div>
+            <div v-else class="p-2 rounded-full bg-gray-700 hover:bg-gray-600 transition">
+              <User class="w-5 h-5" />
+            </div>
           </div>
 
           <!-- Dropdown menu -->

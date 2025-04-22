@@ -23,6 +23,12 @@ const newPassword = ref('');
 const confirmPassword = ref('');
 const wantToDeleteAccount = ref(false);
 
+// Store original data to detect changes
+const originalName = ref('');
+const originalEmail = ref('');
+const originalDepartment = ref('');
+const originalProfileImageUrl = ref('');
+
 // Available departments
 const departments = [
   'Consumer Protection Division',
@@ -61,7 +67,20 @@ const profileImageUrl = ref('');
 const imageUploadError = ref('');
 const fileInputRef = ref<HTMLInputElement | null>(null);
 
+// Add password visibility state for all password fields
+const showCurrentPassword = ref(false);
+const showNewPassword = ref(false);
+const showConfirmPassword = ref(false);
+
 const router = useRouter();
+
+// Check if basic info has been changed
+const basicInfoChanged = computed(() => {
+  return name.value !== originalName.value || 
+         email.value !== originalEmail.value || 
+         department.value !== originalDepartment.value ||
+         profileImageFile.value !== null;
+});
 
 // Fetch user data
 const fetchUserData = async () => {
@@ -72,16 +91,24 @@ const fetchUserData = async () => {
       
       const userData = await pb.collection('users').getOne(userId);
       
+      // Set current values
       name.value = userData.name || '';
       email.value = userData.email || '';
       department.value = userData.department || '';
       role.value = userData.role || 'user';
       
+      // Store original values
+      originalName.value = userData.name || '';
+      originalEmail.value = userData.email || '';
+      originalDepartment.value = userData.department || '';
+      
       // Get avatar URL if it exists
       if (userData.avatar) {
         profileImageUrl.value = pb.getFileUrl(userData, userData.avatar);
+        originalProfileImageUrl.value = profileImageUrl.value;
       } else {
         profileImageUrl.value = '';
+        originalProfileImageUrl.value = '';
       }
     }
   } catch (error) {
@@ -100,6 +127,7 @@ const updateBasicInfo = async () => {
   departmentErrorMessage.value = '';
   successMessage.value = '';
   errorMessage.value = '';
+  imageUploadError.value = '';
   isUpdatingBasicInfo.value = true;
   basicInfoUpdateSuccess.value = false;
   
@@ -140,13 +168,33 @@ const updateBasicInfo = async () => {
       return;
     }
     
-    await pb.collection('users').update(userId, {
-      name: name.value,
-      email: email.value,
-      department: department.value
-    });
+    // Create a FormData object to handle both text fields and file upload
+    const formData = new FormData();
+    formData.append('name', name.value);
+    formData.append('email', email.value);
+    formData.append('department', department.value);
     
-    successMessage.value = 'Basic information updated successfully';
+    // Add profile image if it exists
+    if (profileImageFile.value) {
+      formData.append('avatar', profileImageFile.value);
+    }
+    
+    // Update user data with form data
+    await pb.collection('users').update(userId, formData);
+    
+    // Reset profile image file reference after successful upload
+    if (profileImageFile.value) {
+      profileImageFile.value = null;
+      // Refetch user data to get updated avatar URL
+      await fetchUserData();
+    } else {
+      // Update original values to match the current values
+      originalName.value = name.value;
+      originalEmail.value = email.value;
+      originalDepartment.value = department.value;
+    }
+    
+    successMessage.value = 'Profile information updated successfully';
     basicInfoUpdateSuccess.value = true;
     
     // Reset success state after 3 seconds
@@ -325,38 +373,6 @@ const handleFileSelect = (event: Event) => {
   }
 };
 
-const uploadProfileImage = async () => {
-  if (!profileImageFile.value) return;
-  
-  try {
-    isUploadingImage.value = true;
-    imageUploadError.value = '';
-    
-    const userId = pb.authStore.model?.id;
-    if (!userId) {
-      isUploadingImage.value = false;
-      return;
-    }
-    
-    const formData = new FormData();
-    formData.append('avatar', profileImageFile.value);
-    
-    // Update the user with the new avatar
-    await pb.collection('users').update(userId, formData);
-    
-    successMessage.value = 'Profile picture updated successfully';
-    profileImageFile.value = null;
-    
-    // Refetch user data to get updated avatar URL
-    await fetchUserData();
-  } catch (error: any) {
-    console.error('Error uploading profile image:', error);
-    imageUploadError.value = 'Failed to upload image. Please try again.';
-  } finally {
-    isUploadingImage.value = false;
-  }
-};
-
 // Enhanced onMounted with animations
 onMounted(() => {
   fetchUserData();
@@ -393,7 +409,6 @@ onMounted(() => {
                 <img v-if="profileImageUrl" :src="profileImageUrl" alt="Profile" class="w-full h-full object-cover" />
                 <User v-else class="w-8 h-8 text-gray-500" />
               </div>
-              <div class="absolute -bottom-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-white"></div>
               
               <!-- Hover overlay -->
               <div class="absolute inset-0 bg-black bg-opacity-50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -412,16 +427,18 @@ onMounted(() => {
             <div>
               <div class="text-sm text-gray-500">This will be displayed on your profile.</div>
               
-              <!-- File upload button shows up when a file is selected -->
-              <button 
-                v-if="profileImageFile" 
-                @click.stop="uploadProfileImage" 
-                class="mt-2 flex items-center text-xs text-white bg-[#6A5CFE] px-2 py-1 rounded hover:bg-[#7C6CFF]"
-                :disabled="isUploadingImage"
-              >
-                <Upload v-if="!isUploadingImage" class="w-3 h-3 mr-1" />
-                <span>{{ isUploadingImage ? 'Uploading...' : 'Upload Photo' }}</span>
-              </button>
+              <!-- Show selected file name when a file is selected -->
+              <div v-if="profileImageFile" class="mt-1 text-xs text-blue-600 flex items-center">
+                <span class="truncate max-w-[200px]">{{ profileImageFile.name }}</span>
+                <button 
+                  @click.stop="profileImageFile = null" 
+                  class="ml-2 text-gray-500 hover:text-gray-700"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                  </svg>
+                </button>
+              </div>
               
               <!-- Error message for upload -->
               <p v-if="imageUploadError" class="mt-1 text-xs text-red-600">{{ imageUploadError }}</p>
@@ -520,11 +537,11 @@ onMounted(() => {
         <div class="mt-4 flex justify-end">
           <button 
             @click="updateBasicInfo"
-            :disabled="isUpdatingBasicInfo"
+            :disabled="isUpdatingBasicInfo || !basicInfoChanged"
             class="relative px-4 py-2 rounded-md transition-colors overflow-hidden basic-info-button"
             :class="{
-              'bg-[#6A5CFE] text-white hover:bg-[#7C6CFF]': !basicInfoUpdateSuccess && !isUpdatingBasicInfo,
-              'bg-gray-400 text-white cursor-not-allowed': isUpdatingBasicInfo,
+              'bg-[#6A5CFE] text-white hover:bg-[#7C6CFF]': !basicInfoUpdateSuccess && !isUpdatingBasicInfo && basicInfoChanged,
+              'bg-gray-400 text-white cursor-not-allowed': isUpdatingBasicInfo || !basicInfoChanged,
               'bg-[#6A5CFE] text-white': basicInfoUpdateSuccess
             }"
           >
@@ -534,7 +551,7 @@ onMounted(() => {
             <div class="relative z-10 flex items-center gap-2">
               <Check v-if="basicInfoUpdateSuccess" class="w-4 h-4" />
               <Save v-else class="w-4 h-4" />
-              {{ isUpdatingBasicInfo ? 'Updating...' : (basicInfoUpdateSuccess ? 'Updated!' : 'Update') }}
+              {{ isUpdatingBasicInfo ? 'Updating...' : (basicInfoUpdateSuccess ? 'Updated!' : (profileImageFile ? 'Update Profile & Photo' : 'Update Profile')) }}
             </div>
           </button>
         </div>
@@ -568,7 +585,9 @@ onMounted(() => {
                 :class="{ 
                   'border-red-500 input-error': currentPasswordError 
                 }"
+                placeholder="Enter your current password"
               />
+              <!-- No visibility toggle button -->
             </div>
             <p v-if="currentPasswordError" class="mt-1 text-sm text-red-600">{{ currentPasswordErrorMessage }}</p>
           </div>
@@ -584,12 +603,14 @@ onMounted(() => {
               </div>
               <input 
                 v-model="newPassword" 
-                type="password" 
+                type="password"
                 class="pl-10 w-full p-2 border rounded-md focus-animated"
                 :class="{ 
                   'border-red-500 input-error': newPasswordError 
                 }"
+                placeholder="Create a new password (min 8 chars)"
               />
+              <!-- No visibility toggle button -->
             </div>
             <p v-if="newPasswordError" class="mt-1 text-sm text-red-600">{{ newPasswordErrorMessage }}</p>
           </div>
@@ -605,12 +626,14 @@ onMounted(() => {
               </div>
               <input 
                 v-model="confirmPassword" 
-                type="password" 
+                type="password"
                 class="pl-10 w-full p-2 border rounded-md focus-animated"
                 :class="{ 
                   'border-red-500 input-error': confirmPasswordError 
                 }"
+                placeholder="Re-enter your new password"
               />
+              <!-- No visibility toggle button -->
             </div>
             <p v-if="confirmPasswordError" class="mt-1 text-sm text-red-600">{{ confirmPasswordErrorMessage }}</p>
           </div>
