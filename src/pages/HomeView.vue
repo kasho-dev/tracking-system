@@ -73,12 +73,17 @@ interface Document {
   verificationEvents?: VerificationEvent[];
 }
 
-// Mark document as processed (no longer new)
-const markDocumentAsProcessed = (docId: string) => {
-  processedDocuments.value.add(docId);
+const clickedDocs = ref<Set<string>>(new Set());
+
+  const markAsClicked = (docId: string) => {
+  clickedDocs.value.add(docId);
 };
 
-const processedDocuments = ref<Set<string>>(new Set());
+// Computed property to check if a document is new
+const isNewDocument = (doc: Document) => {
+  return !clickedDocs.value.has(doc.id) && 
+         (doc.status === 'Pending' || doc.status === 'Verified');
+};
 
 
 
@@ -129,28 +134,23 @@ const validateDeliveryDate = () => {
 const shouldMarkAsLapsed = (doc: {
   deliveryDate: string;
   status: string;
-  verificationEvents?: Array<{ type: string; timestamp: string }>;
-  updated?: string;
 }): boolean => {
-  // Skip if already completed
-  if (doc.status === "Completed") return false;
-
-  // Skip if document has been updated after delivery date
+  // Skip if not in lapse-eligible status
+  if (!['Pending', 'Needs Action'].includes(doc.status)) return false;
+  
+  // Skip if no valid delivery date
+  if (!doc.deliveryDate) return false;
+  
   const deliveryDate = new Date(doc.deliveryDate);
-  const today = new Date();
+  if (isNaN(deliveryDate.getTime())) return false;
 
-  // For testing: 1 minute threshold (change to 5 days in production)
-  const lapsedThreshold = new Date(deliveryDate.getTime() + 120000); // 1 minute
-  // const lapsedThreshold = new Date(deliveryDate.getTime() + 5 * 24 * 60 * 60 * 1000); // 5 days
-
-  // Check if we're past the lapse threshold
-  if (today <= lapsedThreshold) return false;
-
-  // Check if document is in Pending or Needs Action status
-  if (["Pending", "Needs Action"].includes(doc.status)) return true;
-
-  // Default case - no activity since delivery date
-  return true;
+  // Testing threshold - 5 minutes
+  // const threshold = 2 * 60 * 1000; 
+  const threshold = 5 * 24 * 60 * 60 * 1000; 
+  const now = new Date();
+  
+  // Only lapse if delivery date was more than threshold ago
+  return (now.getTime() - deliveryDate.getTime()) > threshold;
 };
 
 const showPONumberError = ref(false);
@@ -326,7 +326,6 @@ const startPolling = () => {
 
 const editSupplierInfo = async () => {
   if (!selectedOrder.value || !currentUser.value) return;
-  markDocumentAsProcessed(selectedOrder.value.id);
   await fetchSelectedOrder();
 
   try {
@@ -413,7 +412,6 @@ const isAllowedRole = computed(() => {
 
 const verifyDocument = async () => {
   if (!selectedOrder.value || !currentUser.value) return;
-  markDocumentAsProcessed(selectedOrder.value.id);
   await fetchSelectedOrder(); 
 
   const modifierName =
@@ -1236,6 +1234,7 @@ const isModalOpen = ref(false);
 // Open modal function
 const openModal = async (order: Document) => {
   isOverlayOpen.value = true;
+  markAsClicked(order.id);
   
   // Format delivery date using the new function
   let formattedDeliveryDate = formatEditedDateTime(order.deliveryDate);
@@ -1562,15 +1561,6 @@ const fetchCurrentUser = async () => {
 
 onMounted(async () => {
   await fetchDocuments();
-  documents.value.forEach(doc => {
-    // Mark as processed if:
-    // 1. Has verification events OR
-    // 2. Has been updated (different from creation time)
-    if ((doc.verificationEvents && doc.verificationEvents.length > 0) || 
-        (doc.updated && doc.updated !== doc.dateCreated)) {
-      processedDocuments.value.add(doc.id);
-    }
-  });
   fetchCurrentUser();
   startPolling();
 
@@ -1578,21 +1568,6 @@ onMounted(async () => {
 
 
 
-// Computed property to check if a document is new
-const isNewDocument = (doc: Document) => {
-  // Never show for completed, lapsed, or already processed documents
-  if (doc.status === 'Completed' || 
-      doc.status === 'Lapsed' || 
-      doc.status === 'Needs Action' ||
-      processedDocuments.value.has(doc.id)) {
-    return false;
-  }
-
-  const hasNoEvents = 
-    (!doc.verificationEvents || doc.verificationEvents.length === 0);
-
-  return (doc.status === 'Pending' || doc.status === 'Verified') && hasNoEvents;
-};
 
 
 
@@ -1784,32 +1759,32 @@ const areDatesEqual = (date1: string | undefined | null, date2: string | undefin
                     </p>
                   </div>
 
-                  <!-- Delivery Date -->
-                  <div>
-                    <label class="block text-gray-400 text-sm mb-1">
-                      Delivery Date<span class="text-red-500">*</span>
-                    </label>
-                    <input
-                      v-model="deliveryDate"
-                      type="datetime-local"
-                      :min="minDeliveryDate"
-                      class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      :class="{
-                        'border-red-500': showDeliveryDateError || dateError,
-                      }"
-                      @change="validateDeliveryDate"
-                    />
-                    <p
-                      v-if="showDeliveryDateError"
-                      class="text-red-500 text-xs mt-1"
-                    >
-                      Delivery date is required
-                    </p>
-                    <p v-if="dateError" class="text-red-500 text-xs mt-1">
-                      Delivery date must be in the future
-                    </p>
-                  </div>
+                <!-- Delivery Date -->
+                <div>
+                  <label class="block text-gray-400 text-sm mb-1">
+                    Delivery Date (Lapse after 5 days)<span class="text-red-500">*</span>
+                  </label>
+                  <input
+                    v-model="deliveryDate"
+                    type="datetime-local"
+                    :min="minDeliveryDate"
+                    class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    :class="{
+                      'border-red-500': showDeliveryDateError || dateError,
+                    }"
+                    @change="validateDeliveryDate"
+                  />
+                  <p
+                    v-if="showDeliveryDateError"
+                    class="text-red-500 text-xs mt-1"
+                  >
+                    Delivery date is required
+                  </p>
+                  <p v-if="dateError" class="text-red-500 text-xs mt-1">
+                    Delivery date must be in the future
+                  </p>
                 </div>
+              </div>
 
                 <div class="flex justify-end gap-2 mt-6">
                   <button
