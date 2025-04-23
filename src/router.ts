@@ -6,6 +6,7 @@ import CounterViewView from "./pages/CounterView.vue";
 import LoginView from "./pages/LoginView.vue";
 import SettingsView from "./pages/SettingsView.vue";
 import SignupView from "./pages/SignupView.vue";
+import ForgotPasswordView from "./pages/ForgotPasswordView.vue";
 
 const pb = new PocketBase('http://127.0.0.1:8090');
 
@@ -23,6 +24,7 @@ const routes = [
     },
     { path: '/login', component: LoginView },
     { path: '/signup', component: SignupView },
+    { path: '/forgot-password', component: ForgotPasswordView },
     { 
         path: '/settings', 
         component: SettingsView, 

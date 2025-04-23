@@ -1,5 +1,7 @@
 <template>
-  <div class="min-h-screen animated-bg relative overflow-hidden flex items-center justify-center p-4">
+  <div
+    class="min-h-screen animated-bg relative overflow-hidden flex items-center justify-center p-4"
+  >
     <transition
       appear
       enter-active-class="transition duration-500 ease-out"
@@ -10,21 +12,124 @@
         <div class="flex justify-center mb-6">
           <img :src="logo" alt="Logo" class="w-24 mx-auto logo-pulse" />
         </div>
-        <!-- <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">Welcome</h1> -->
-        
-        <form @submit.prevent="handleLogin" class="space-y-6">
-          <h2 class="text-2xl font-semibold text-center text-gray-700 mb-6">Sign In</h2>
-          
+
+        <!-- Quick Login (Remembered User) -->
+        <div v-if="showQuickLogin" class="space-y-6">
+          <h2 class="text-2xl font-semibold text-center text-gray-700 mb-6">
+            Welcome Back
+          </h2>
+
+          <div
+            v-if="errorMessage"
+            class="p-4 bg-red-100 border border-red-400 text-red-700 rounded"
+          >
+            {{ errorMessage }}
+          </div>
+
+          <div class="flex flex-col items-center justify-center">
+            <button
+              @click="quickLogin"
+              type="button"
+              class="w-auto h-auto flex flex-col items-center cursor-pointer transition-all duration-300 transform hover:scale-105 focus:outline-none"
+              :disabled="isLoading"
+            >
+              <!-- User avatar or default icon -->
+              <div
+                v-if="rememberedUserAvatar"
+                class="w-24 h-24 rounded-full overflow-hidden border-4 border-blue-500 shadow-lg mb-4"
+              >
+                <img
+                  :src="rememberedUserAvatar"
+                  alt="User"
+                  class="w-full h-full object-cover"
+                />
+              </div>
+              <div
+                v-else
+                class="w-24 h-24 rounded-full bg-blue-100 flex items-center justify-center border-4 border-blue-500 shadow-lg mb-4"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-12 w-12 text-blue-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                  />
+                </svg>
+              </div>
+
+              <p class="text-lg font-medium text-center text-gray-800">
+                {{ rememberedUserName || rememberedUserEmail }}
+              </p>
+              <p
+                class="text-sm text-center text-gray-500 mt-1"
+                v-if="!isLoading"
+              >
+                Click to sign in
+              </p>
+              <p
+                class="text-sm text-center text-blue-600 mt-1 flex items-center"
+                v-else
+              >
+                <svg
+                  class="animate-spin -ml-1 mr-2 h-4 w-4 text-blue-600"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    class="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    stroke-width="4"
+                  ></circle>
+                  <path
+                    class="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+                Signing in...
+              </p>
+            </button>
+
+            <button
+              @click="clearQuickLogin"
+              class="mt-6 px-4 py-2 text-sm text-blue-600 hover:text-blue-800 hover:underline focus:outline-none"
+              type="button"
+            >
+              Not you?
+            </button>
+          </div>
+        </div>
+
+        <!-- Standard Login Form -->
+        <form v-else @submit.prevent="handleLogin" class="space-y-6">
+          <h2 class="text-2xl font-semibold text-center text-gray-700 mb-6">
+            Sign In
+          </h2>
+
           <transition
             enter-active-class="transition duration-300 ease-out"
             enter-from-class="opacity-0 transform translate-y-4"
             enter-to-class="opacity-100 transform translate-y-0"
           >
-            <div v-if="errorMessage" class="p-4 bg-red-100 border border-red-400 text-red-700 rounded">
+            <div
+              v-if="errorMessage"
+              class="p-4 bg-red-100 border border-red-400 text-red-700 rounded"
+            >
               {{ errorMessage }}
             </div>
           </transition>
-          
+
           <!-- Email Field -->
           <transition
             appear
@@ -33,7 +138,9 @@
             enter-to-class="opacity-100 transform translate-x-0"
           >
             <div class="space-y-2">
-              <label for="email" class="block text-sm font-medium text-gray-700">Email ID</label>
+              <label for="email" class="block text-sm font-medium text-gray-700"
+                >Email ID</label
+              >
               <input
                 type="email"
                 id="email"
@@ -41,10 +148,10 @@
                 required
                 placeholder="Enter your email"
                 class="w-full px-4 py-3 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-              >
+              />
             </div>
           </transition>
-          
+
           <!-- Password Field -->
           <transition
             appear
@@ -54,7 +161,11 @@
             :style="{ transitionDelay: '100ms' }"
           >
             <div class="space-y-2">
-              <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
+              <label
+                for="password"
+                class="block text-sm font-medium text-gray-700"
+                >Password</label
+              >
               <div class="relative">
                 <input
                   type="password"
@@ -63,13 +174,15 @@
                   required
                   placeholder="Enter your password"
                   class="w-full px-4 py-3 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                >
+                />
                 <!-- No visibility toggle button -->
               </div>
-              <p v-if="passwordError" class="text-sm text-red-600">{{ passwordError }}</p>
+              <p v-if="passwordError" class="text-sm text-red-600">
+                {{ passwordError }}
+              </p>
             </div>
           </transition>
-          
+
           <!-- Remember Me & Forgot Password -->
           <transition
             appear
@@ -85,20 +198,22 @@
                   id="remember"
                   v-model="rememberMe"
                   class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label for="remember" class="ml-2 block text-sm text-gray-700"
+                  >Remember me</label
                 >
-                <label for="remember" class="ml-2 block text-sm text-gray-700">Remember me</label>
               </div>
-              
+
               <a
                 href="#"
                 class="text-sm text-blue-600 hover:text-blue-800 hover:underline"
                 @click.prevent="handleForgotPassword"
               >
-                Forget Password
+                Forgot Password?
               </a>
             </div>
           </transition>
-          
+
           <!-- Submit Button -->
           <transition
             appear
@@ -114,15 +229,31 @@
             >
               <span v-if="!isLoading">Sign in</span>
               <span v-else class="flex justify-center items-center">
-                <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                <svg
+                  class="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    class="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    stroke-width="4"
+                  ></circle>
+                  <path
+                    class="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
                 </svg>
                 Signing in...
               </span>
             </button>
           </transition>
-          
+
           <!-- Sign Up Link -->
           <transition
             appear
@@ -133,8 +264,10 @@
           >
             <div class="text-center mt-4">
               <p class="text-sm text-gray-700">
-                Don't have an account? 
-                <router-link to="/signup" class="text-blue-600 hover:underline">Create an account</router-link>
+                Don't have an account?
+                <router-link to="/signup" class="text-blue-600 hover:underline"
+                  >Create an account</router-link
+                >
               </p>
             </div>
           </transition>
@@ -150,7 +283,7 @@ import logo from '../assets/logo.png';
 
 export default {
   name: 'LoginView',
-  
+
   data() {
     return {
       email: '',
@@ -161,18 +294,25 @@ export default {
       passwordError: '',
       showPassword: false,
       logo,
-      pb: new PocketBase('http://127.0.0.1:8090') // Replace with your PocketBase URL
+      pb: new PocketBase('http://127.0.0.1:8090'), // Replace with your PocketBase URL
+
+      // Quick login state
+      showQuickLogin: false,
+      rememberedUserEmail: '',
+      rememberedUserName: '',
+      rememberedUserAvatar: '',
+      rememberedUserPassword: '',
     }
   },
-  
+
   methods: {
     validateForm() {
       let isValid = true;
-      
+
       // Reset errors
       this.errorMessage = '';
       this.passwordError = '';
-      
+
       // Simple validation for password
       if (!this.password) {
         this.passwordError = 'Password is required';
@@ -181,36 +321,141 @@ export default {
         this.passwordError = 'Password must be at least 8 characters long';
         isValid = false;
       }
-      
+
       return isValid;
     },
-    
+
     async handleLogin() {
       // Validate form first
       if (!this.validateForm()) {
         return;
       }
-      
+
       this.isLoading = true;
       this.errorMessage = '';
-      
+
       try {
         // Authenticate the user
         const authData = await this.pb.collection('users').authWithPassword(
           this.email,
           this.password
         );
-        console.log('Login successful!', authData);
-        
-        // Redirect to dashboard or home page after successful login
-        this.$router.push('/home'); // Change this to your desired route
-        
+
+        // Only proceed if we have a valid auth response
+        if (authData && this.pb.authStore.isValid) {
+          console.log('Login successful!', authData);
+
+          // Store auth data based on remember me option
+          const authStoreData = this.pb.authStore.exportToCookie();
+
+          if (this.rememberMe) {
+            // Save to localStorage for persistent login
+            localStorage.setItem('pocketbase_auth', authStoreData);
+
+            // Save additional user info for quick login
+            const userInfo = {
+              email: this.email,
+              password: this.password, // Store encrypted or hashed in a real production app
+              name: this.pb.authStore.model?.name || '',
+              avatar: this.pb.authStore.model?.avatar ? this.pb.files.getUrl(this.pb.authStore.model, this.pb.authStore.model.avatar) : ''
+            };
+            localStorage.setItem('remembered_user', JSON.stringify(userInfo));
+          } else {
+            // Save to sessionStorage for session-only login
+            sessionStorage.setItem('pocketbase_auth', authStoreData);
+
+            // Clear any remembered user
+            localStorage.removeItem('remembered_user');
+          }
+
+          // CRITICAL: Force a full page reload to ensure the router's PocketBase instance
+          // gets the updated auth state from storage
+          console.log("Redirecting to home page...");
+
+          // First force a reload of the current page to refresh the auth state
+          window.location.reload();
+
+          // Set a timeout to redirect after reload
+          setTimeout(() => {
+            window.location.replace('/home');
+          }, 300);
+
+          return; // Early return to prevent further execution
+        } else {
+          // Handle unexpected response format
+          throw new Error('Authentication response was invalid');
+        }
+
       } catch (error) {
         console.error('Login failed:', error);
+
+        // Clear any potentially saved auth data
+        this.pb.authStore.clear();
+        localStorage.removeItem('pocketbase_auth');
+        sessionStorage.removeItem('pocketbase_auth');
+
         this.errorMessage = 'Invalid email or password. Please try again.';
       } finally {
         this.isLoading = false;
       }
+    },
+
+    async quickLogin() {
+      if (this.isLoading) return; // Prevent multiple clicks
+
+      this.isLoading = true;
+      this.errorMessage = '';
+
+      try {
+        console.log('Attempting quick login with:', this.rememberedUserEmail);
+
+        // Use stored credentials for quick login
+        const authData = await this.pb.collection('users').authWithPassword(
+          this.rememberedUserEmail,
+          this.rememberedUserPassword
+        );
+
+        if (authData && this.pb.authStore.isValid) {
+          console.log('Quick login successful!', authData);
+
+          // Store auth data in localStorage (since this is a remembered user)
+          const authStoreData = this.pb.authStore.exportToCookie();
+          localStorage.setItem('pocketbase_auth', authStoreData);
+
+          // CRITICAL: Force a full page reload to ensure the router's PocketBase instance
+          // gets the updated auth state from storage. This is necessary because the router
+          // is using a different PocketBase instance than this component.
+          console.log("Redirecting to home page after quick login...");
+
+          // First force a reload of the current page to refresh the auth state
+          window.location.reload();
+
+          // Set a timeout to redirect after reload
+          setTimeout(() => {
+            window.location.replace('/home');
+          }, 300);
+
+          return; // Early return to prevent further execution
+        } else {
+          throw new Error('Authentication failed');
+        }
+      } catch (error) {
+        console.error('Quick login failed:', error);
+        this.errorMessage = 'Quick login failed. Please sign in manually.';
+        this.clearQuickLogin();
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    clearQuickLogin() {
+      // Clear remembered user data and show regular login form
+      localStorage.removeItem('remembered_user');
+      this.showQuickLogin = false;
+      this.rememberedUserEmail = '';
+      this.rememberedUserPassword = '';
+      this.rememberedUserName = '';
+      this.rememberedUserAvatar = '';
     },
 
     handleForgotPassword() {
@@ -222,33 +467,40 @@ export default {
   },
 
   mounted() {
-    // Check if user is already authenticated
+    console.log("LoginView mounted");
+
+    // 1. First check if user is already authenticated via PocketBase's internal state
     if (this.pb.authStore.isValid) {
-      this.$router.push('/home'); // Redirect to dashboard if already logged in
+      console.log("User already authenticated in PocketBase state, redirecting to home...");
+      window.location.replace('/home');
       return;
     }
-    
-    // Check for credentials from signup
-    const newUserEmail = sessionStorage.getItem('newUserEmail');
-    const newUserPassword = sessionStorage.getItem('newUserPassword');
-    
-    if (newUserEmail && newUserPassword) {
-      // Populate the login form with credentials from signup
-      this.email = newUserEmail;
-      this.password = newUserPassword;
-      
-      // Remove the stored credentials for security
-      sessionStorage.removeItem('newUserEmail');
-      sessionStorage.removeItem('newUserPassword');
-    }
-    
-    // Try to restore authentication from storage
-    const authData = localStorage.getItem('pocketbase_auth') || sessionStorage.getItem('pocketbase_auth');
+
+    // 2. Next, try to restore authentication from storage
+    let authData = localStorage.getItem('pocketbase_auth') || sessionStorage.getItem('pocketbase_auth');
+
     if (authData) {
       try {
-        this.pb.authStore.import(JSON.parse(authData));
+        // Import the auth data using the cookie method
+        console.log("Found stored auth data, loading...");
+        this.pb.authStore.loadFromCookie(authData);
+
         if (this.pb.authStore.isValid) {
-          this.$router.push('/home');
+          console.log("Valid authentication restored from storage, redirecting to home...");
+
+          // First force a reload of the current page to refresh the auth state
+          window.location.reload();
+
+          // Set a timeout to redirect after reload
+          setTimeout(() => {
+            window.location.replace('/home');
+          }, 300);
+          return;
+        } else {
+          console.log("Found auth data but it's invalid, clearing...");
+          this.pb.authStore.clear();
+          localStorage.removeItem('pocketbase_auth');
+          sessionStorage.removeItem('pocketbase_auth');
         }
       } catch (e) {
         console.error('Failed to restore auth:', e);
@@ -257,6 +509,43 @@ export default {
         sessionStorage.removeItem('pocketbase_auth');
       }
     }
+
+    // 3. If we get here, there's no valid auth, check for remembered user for quick login
+    console.log("No valid auth, checking for remembered user...");
+    const rememberedUser = localStorage.getItem('remembered_user');
+    if (rememberedUser) {
+      try {
+        const userData = JSON.parse(rememberedUser);
+        this.rememberedUserEmail = userData.email || '';
+        this.rememberedUserPassword = userData.password || '';
+        this.rememberedUserName = userData.name || '';
+        this.rememberedUserAvatar = userData.avatar || '';
+
+        if (this.rememberedUserEmail && this.rememberedUserPassword) {
+          console.log("Found remembered user, showing quick login");
+          this.showQuickLogin = true;
+          return;
+        }
+      } catch (e) {
+        console.error('Failed to parse remembered user data:', e);
+        localStorage.removeItem('remembered_user');
+      }
+    }
+
+    // 4. Finally, check for credentials from signup
+    const newUserEmail = sessionStorage.getItem('newUserEmail');
+    const newUserPassword = sessionStorage.getItem('newUserPassword');
+
+    if (newUserEmail && newUserPassword) {
+      console.log("Found credentials from signup");
+      this.email = newUserEmail;
+      this.password = newUserPassword;
+
+      sessionStorage.removeItem('newUserEmail');
+      sessionStorage.removeItem('newUserPassword');
+    }
+
+    console.log("Showing standard login form");
   }
 }
 </script>
@@ -269,12 +558,18 @@ export default {
 
 /* Animated gradient background */
 @keyframes gradientBG {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
 }
 .animated-bg {
-  background: linear-gradient(135deg, #0A0E1A, #1A1F36, #0A0E1A);
+  background: linear-gradient(135deg, #0a0e1a, #1a1f36, #0a0e1a);
   background-size: 400% 400%;
   animation: gradientBG 20s ease infinite;
 }
@@ -284,7 +579,12 @@ export default {
   max-width: 100px;
 }
 @keyframes pulseGlow {
-  0%, 100% { box-shadow: 0 0 5px rgba(255,255,255,0.5); }
-  50% { box-shadow: 0 0 20px rgba(255,255,255,0.2); }
+  0%,
+  100% {
+    box-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+  }
 }
 </style>

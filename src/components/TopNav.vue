@@ -57,7 +57,16 @@ const closeDropdown = (event: MouseEvent) => {
 // Handle logout
 const handleLogout = async () => {
   try {
+    // Clear PocketBase auth store
     pb.authStore.clear();
+    
+    // Clear stored authentication data
+    localStorage.removeItem('pocketbase_auth');
+    sessionStorage.removeItem('pocketbase_auth');
+    
+    // Don't clear remembered_user here to enable the quick login feature
+    // This allows us to show the user icon on the login page after logout
+    
     isDropdownOpen.value = false;
     router.push('/login');
   } catch (error) {
