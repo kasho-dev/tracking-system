@@ -47,27 +47,38 @@
         <form @submit.prevent="handlePasswordReset" v-if="!successMessage">
           <!-- Email Input -->
           <div class="mb-6">
-            <label for="email" class="block text-sm font-medium text-gray-700 mb-2">Email</label>
-            <div class="relative">
-              <input
-                id="email"
-                v-model="email"
-                type="email"
-                required
-                :class="['w-full px-4 py-3 rounded-md border focus:outline-none focus:ring-2 transition-all duration-300',
-                  emailError ? 'border-red-300 focus:border-red-500 focus:ring-red-200' :
-                  'border-gray-300 focus:border-blue-500 focus:ring-blue-200']"
-                placeholder="Enter your email"
-              />
-              <div v-if="emailError" class="mt-1 text-sm text-red-600">{{ emailErrorMessage }}</div>
-            </div>
+            <transition
+              appear
+              enter-active-class="transition duration-500 ease-out"
+              enter-from-class="opacity-0 transform -translate-x-10"
+              enter-to-class="opacity-100 transform translate-x-0"
+            >
+              <div>
+                <label for="email" class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                <div class="relative">
+                  <input
+                    id="email"
+                    v-model="email"
+                    type="email"
+                    required
+                    :class="['w-full px-4 py-3 rounded-md border focus:outline-none focus:ring-2 transition-all duration-300',
+                      emailError ? 'border-red-300 focus:border-red-500 focus:ring-red-200' :
+                      'border-gray-300 focus:border-blue-500 focus:ring-blue-200']"
+                    placeholder="Enter your email"
+                  />
+                  <div v-if="emailError" class="mt-1 text-sm text-red-600">{{ emailErrorMessage }}</div>
+                </div>
+              </div>
+            </transition>
           </div>
 
           <!-- Submit Button -->
           <transition
-            enter-active-class="transition duration-300 ease-out"
-            enter-from-class="opacity-0 transform translate-y-4"
+            appear
+            enter-active-class="transition duration-500 ease-out"
+            enter-from-class="opacity-0 transform translate-y-10"
             enter-to-class="opacity-100 transform translate-y-0"
+            :style="{ transitionDelay: '200ms' }"
           >
             <button
               type="submit"
@@ -91,7 +102,7 @@
             enter-active-class="transition duration-500 ease-out"
             enter-from-class="opacity-0"
             enter-to-class="opacity-100"
-            :style="{ transitionDelay: '400ms' }"
+            :style="{ transitionDelay: '300ms' }"
           >
             <div class="text-center mt-4">
               <p class="text-sm text-gray-700">

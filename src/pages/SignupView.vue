@@ -187,7 +187,7 @@
               </div>
               <div class="ml-3 text-sm">
                 <label for="terms" class="text-gray-700">
-                  I agree to the <a href="#" class="text-blue-600 hover:underline">Terms and Conditions</a> and <a href="#" class="text-blue-600 hover:underline">Privacy Policy</a>
+                  I agree to the <a href="https://www.dti.gov.ph/terms-and-conditions/" class="text-blue-600 hover:underline" target="_blank" >Terms and Conditions</a> and <a href="https://www.dti.gov.ph/privacy-policy/"  class="text-blue-600 hover:underline" target="_blank">Privacy Policy</a>
                 </label>
                 <p v-if="termsError" class="text-red-600">{{ termsError }}</p>
               </div>
