@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-[#0A0E1A] flex items-center justify-center p-4">
+  <div class="min-h-screen animated-bg relative overflow-hidden flex items-center justify-center p-4">
     <transition
       appear
       enter-active-class="transition duration-500 ease-out"
@@ -7,7 +7,10 @@
       enter-to-class="opacity-100 transform scale-100"
     >
       <div class="bg-white rounded-lg shadow-md w-full max-w-md p-8">
-        <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">Welcome</h1>
+        <div class="flex justify-center mb-6">
+          <img :src="logo" alt="Logo" class="w-24 mx-auto logo-pulse" />
+        </div>
+        <!-- <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">Welcome</h1> -->
         
         <form @submit.prevent="handleLogin" class="space-y-6">
           <h2 class="text-2xl font-semibold text-center text-gray-700 mb-6">Sign In</h2>
@@ -143,6 +146,7 @@
 
 <script>
 import PocketBase from 'pocketbase';
+import logo from '../assets/logo.png';
 
 export default {
   name: 'LoginView',
@@ -156,6 +160,7 @@ export default {
       errorMessage: '',
       passwordError: '',
       showPassword: false,
+      logo,
       pb: new PocketBase('http://127.0.0.1:8090') // Replace with your PocketBase URL
     }
   },
@@ -260,5 +265,26 @@ export default {
 /* Add transition delay styling */
 [style*="transitionDelay"] {
   transition-delay: var(--delay);
+}
+
+/* Animated gradient background */
+@keyframes gradientBG {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.animated-bg {
+  background: linear-gradient(135deg, #0A0E1A, #1A1F36, #0A0E1A);
+  background-size: 400% 400%;
+  animation: gradientBG 20s ease infinite;
+}
+
+.logo-pulse {
+  animation: pulseGlow 2s ease-in-out infinite;
+  max-width: 100px;
+}
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 5px rgba(255,255,255,0.5); }
+  50% { box-shadow: 0 0 20px rgba(255,255,255,0.2); }
 }
 </style>

@@ -833,7 +833,7 @@ const formatTimestamp = (timestamp: string) => {
 // fetchTassadarUser();
 
 // Sorting Table
-const sortField = ref("dateCreated");
+const sortField = ref("updated");
 const sortDirection = ref("desc");
 
 const sortedDocuments = computed(() => {
@@ -841,11 +841,14 @@ const sortedDocuments = computed(() => {
   const direction = sortDirection.value;
 
   return [...filteredDocuments.value].sort((a, b) => {
-    // Handle date fields differently
-    if (field === "dateCreated") {
-      const dateA = new Date(a.dateCreated).getTime();
-      const dateB = new Date(b.dateCreated).getTime();
-      return direction === "asc" ? dateA - dateB : dateB - dateA;
+    // Handle date fields differently (creation or last update)
+    if (field === "dateCreated" || field === "updated") {
+      // Fallback to creation date if updated is missing
+      const dateA = field === "dateCreated" ? a.dateCreated : (a.updated ?? a.dateCreated);
+      const dateB = field === "dateCreated" ? b.dateCreated : (b.updated ?? b.dateCreated);
+      const timeA = new Date(dateA).getTime();
+      const timeB = new Date(dateB).getTime();
+      return direction === "asc" ? timeA - timeB : timeB - timeA;
     }
 
     // Handle string fields
@@ -946,7 +949,8 @@ const closeModalAdd = () => {
 const fetchDocuments = async () => {
   try {
     const records = await pb.collection("Collection_1").getFullList({
-      sort: "-created",
+      // Sort by last modified timestamp so latest updates appear first
+      sort: "-updated",
       expand:
         "verifiedAt,completedAt,updated,verifiedBy,verificationEvents.userId,createdBy",
     });
@@ -1025,6 +1029,10 @@ const fetchDocuments = async () => {
         };
       })
     );
+
+    // Reset table sorting to show latest modified first
+    sortField.value = 'updated';
+    sortDirection.value = 'desc';
   } catch (error) {
     console.error("Error fetching documents:", error);
     alert("Failed to load documents. Please try again.");
