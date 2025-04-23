@@ -199,9 +199,11 @@ const formatEditedDateTime = (
 
   try {
     const date = new Date(dateString);
-    // For created dates, don't add timezone offset
-    if (isCreatedDate) {
-      return date.toLocaleString("en-US", {
+    
+    // For delivery dates, add timezone offset for Philippine time (UTC+8)
+    if (!isCreatedDate) {
+      const phDate = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+      return phDate.toLocaleString("en-US", {
         month: "short",
         day: "numeric",
         year: "numeric",
@@ -210,9 +212,9 @@ const formatEditedDateTime = (
         hour12: true
       });
     }
-    // For delivery dates, add timezone offset
-    const phDate = new Date(date.getTime() + 8 * 60 * 60 * 1000);
-    return phDate.toLocaleString("en-US", {
+    
+    // For created dates, use as is
+    return date.toLocaleString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
@@ -675,6 +677,16 @@ const events = computed(() => {
               modeofProcurement: "Mode of Procurement",
               deliveryDate: "Delivery Date"
             };
+
+            // Special handling for delivery date field
+            if (field === 'deliveryDate') {
+              return {
+                field: fieldNames[field] || field,
+                oldValue: details.oldValue || 'empty',
+                newValue: details.newValue || 'empty'
+              };
+            }
+
             return {
               field: fieldNames[field] || field,
               oldValue: details.oldValue || 'empty',
@@ -682,7 +694,7 @@ const events = computed(() => {
             };
           });
 
-        const eventId = event.timestamp; // Use timestamp as unique ID
+        const eventId = event.timestamp;
         if (!(eventId in expandedStates.value)) {
           expandedStates.value[eventId] = false;
         }
@@ -1363,7 +1375,7 @@ const toggleAllSelection = () => {
 // };
 
 const downloadSelectedDocuments = () => {
-  // Filter selected documents that match the active status and are XLSX files
+  // Filter selected documents that match the active status
   const selectedDocs = selectedDocuments.value
     .map((id) => documents.value.find((doc) => doc.id === id))
     .filter(
@@ -1374,48 +1386,106 @@ const downloadSelectedDocuments = () => {
     );
 
   if (selectedDocs.length === 0) {
-    alert("No XLSX files selected for the current status.");
+    alert("No documents selected for download.");
     return;
   }
 
   if (selectedDocs.length === 1) {
-    // Single document selected - Name file based on Order Number
+    // Single document selected
     const doc = selectedDocs[0];
-    const fileName = `${doc.orderNumber}.xlsx`;
+    const fileName = `${doc.orderNumber}.txt`;
+    
+    // Format timeline events
+    const timelineEvents = doc.verificationEvents?.map(event => {
+      const eventType = getVerificationTitle(event.type);
+      const timestamp = formatTimestamp(event.timestamp);
+      const user = event.userName || "Unknown";
+      
+      let changes = "";
+      if (event.modifiedFields) {
+        const fieldChanges = Object.entries(event.modifiedFields)
+          .filter(([_, details]) => details.changed)
+          .map(([field, details]) => {
+            const fieldNames: Record<string, string> = {
+              orderNumber: "Work Order #",
+              supplierName: "Supplier Name",
+              address: "Address",
+              tin_ID: "TIN ID",
+              modeofProcurement: "Mode of Procurement",
+              deliveryDate: "Delivery Date"
+            };
+            return `${fieldNames[field] || field}: ${details.oldValue || 'empty'} → ${details.newValue || 'empty'}`;
+          })
+          .join('\n');
+        if (fieldChanges) {
+          changes = `\nChanges:\n${fieldChanges}`;
+        }
+      }
 
-    const data = [
-      {
-        "Order Number": doc.orderNumber,
-        "Tracking ID": doc.trackingId,
-        "Handled By": doc.handledBy,
-        "Created By": doc.createdBy,
-        "Date Created": doc.dateCreated,
-        "Supplier Name": doc.supplierName,
-        "Supplier Address": doc.address,
-        "TIN ID": doc.tin_ID,
-        "Mode of Procurement": doc.modeofProcurement,
-        "Delivery Date": doc.deliveryDate,
-      },
-    ];
+      return `${eventType}\nTime: ${timestamp}\nBy: ${user}${changes}`;
+    }).join('\n\n') || "No timeline events";
 
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Order Details");
-    XLSX.writeFile(workbook, fileName);
+    // Create text content
+    const textContent = `
+Order Details: ${doc.orderNumber}
+Tracking ID: ${doc.trackingId}
+Created at: ${doc.dateCreated}
+Status: ${doc.status}
+Handled By: ${doc.handledBy}
+Created By: ${doc.createdBy}
+
+Supplier Information:
+Supplier Name: ${doc.supplierName}
+Address: ${doc.address}
+TIN ID: ${doc.tin_ID}
+Mode of Procurement: ${doc.modeofProcurement}
+Delivery Date: ${doc.deliveryDate}
+
+Timeline Events:
+${timelineEvents}
+
+Verified At: ${doc.verifiedAt ? formatTimestamp(doc.verifiedAt) : "Not verified"}
+Verified By: ${doc.verifiedByName || "Not verified"}
+Completed At: ${doc.completedAt ? formatTimestamp(doc.completedAt) : "Not completed"}
+Last Updated: ${doc.updated ? formatTimestamp(doc.updated) : "Not updated"}
+`;
+
+    // Create and download the file
+    const blob = new Blob([textContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   } else {
-    // Multiple documents selected - Name file as "Multiple Orders.xlsx"
-    const data = selectedDocs.map((doc) => ({
-      "Order Number": doc.orderNumber,
-      "Tracking ID": doc.trackingId,
-      "Handled By": doc.handledBy,
-      "Created By": doc.createdBy,
-      "Date Created": doc.dateCreated,
-    }));
+    // Multiple documents selected - Create a summary text file
+    const textContent = selectedDocs.map(doc => `
+Order Number: ${doc.orderNumber}
+Tracking ID: ${doc.trackingId}
+Created at: ${doc.dateCreated}
+Status: ${doc.status}
+Handled By: ${doc.handledBy}
+Created By: ${doc.createdBy}
+Supplier Name: ${doc.supplierName}
+Delivery Date: ${doc.deliveryDate}
+Verified At: ${doc.verifiedAt ? formatTimestamp(doc.verifiedAt) : "Not verified"}
+Verified By: ${doc.verifiedByName || "Not verified"}
+Completed At: ${doc.completedAt ? formatTimestamp(doc.completedAt) : "Not completed"}
+----------------------------------------
+`).join('\n');
 
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Selected Orders");
-    XLSX.writeFile(workbook, "Multiple Orders.xlsx");
+    const blob = new Blob([textContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = "Multiple Orders.txt";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 };
 
