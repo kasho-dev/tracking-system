@@ -252,7 +252,8 @@ const fetchSelectedOrder = async () => {
 
       return {
         ...event,
-        userName: user?.name || user?.email || "System",
+        // Preserve original event.userName if expand lookup fails, fallback to System
+        userName: user?.name || user?.email || event.userName || "System",
       };
     });
 
@@ -882,6 +883,11 @@ const isEditMode = ref(false);
 const currentEditingId = ref<string | null>(null);
 
 const openEditModal = (order: Document) => {
+  // Prevent editing if document is completed
+  if (order.status === 'Completed') {
+    alert('Cannot edit a completed document.');
+    return;
+  }
   isEditMode.value = true;
   currentEditingId.value = order.id;
   poNumber.value = order.orderNumber;
@@ -2215,6 +2221,7 @@ const areDatesEqual = (date1: string | undefined | null, date2: string | undefin
                 <div class="flex justify-between items-center mb-2">
                   <h3 class="font-semibold">Supplier Information:</h3>
                   <button
+                    v-if="selectedOrder?.status !== 'Completed'"
                     @click="openEditModal(selectedOrder)"
                     class="text-sm text-purple-400 hover:text-purple-300 flex items-center gap-1"
                   >
