@@ -248,6 +248,25 @@ const updateBasicInfo = async () => {
           emailError.value = false;
           emailErrorMessage.value = '';
           newEmailAddress.value = email.value;
+          
+          // Force logout after successful email change request
+          setTimeout(() => {
+            // Clear all auth data
+            pb.authStore.clear();
+            localStorage.removeItem('pocketbase_auth');
+            sessionStorage.removeItem('pocketbase_auth');
+            
+            // Also remove any remembered user data to force complete re-login
+            localStorage.removeItem('remembered_user');
+            
+            // Show success message that will be visible briefly before redirect
+            successMessage.value = 'Your email has been updated. Please log in again with your new email.';
+            
+            // Redirect to login page after a short delay
+            setTimeout(() => {
+              window.location.replace('/login');
+            }, 10000);
+          }, 1500);
         } catch (e) {
           // Handle the error without logging to console
           emailError.value = true;
@@ -524,6 +543,25 @@ onMounted(() => {
     class="min-h-screen animated-bg relative overflow-hidden p-4 md:p-6"
   >
     <div class="space-y-6 max-w-3xl mx-auto">
+      <!-- Success notification for email change -->
+      <div 
+        v-if="successMessage" 
+        class="fixed top-4 right-4 left-4 md:left-auto md:max-w-md bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded z-50 shadow-lg transform transition-all duration-500 ease-out"
+        :class="{ 'translate-y-0 opacity-100': successMessage, 'translate-y-[-20px] opacity-0': !successMessage }"
+      >
+        <div class="flex">
+          <div class="py-1">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div>
+            <p class="font-bold">Success</p>
+            <p class="text-sm">{{ successMessage }}</p>
+          </div>
+        </div>
+      </div>
+      
       <!-- Basic Information Card with animation -->
       <div 
         class="bg-white rounded-lg shadow p-6 transform transition-all duration-500 ease-out"
