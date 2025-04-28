@@ -125,7 +125,7 @@ const formatDeliveryDateTime = (
 };
 //delivery date restriction for create order
 const dateError = ref(false);
-const minDeliveryDate = ref(() => {
+const minDeliveryDate = computed(() => {
   const now = new Date();
   // Convert to Philippine time (UTC+8)
   const phTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
@@ -897,6 +897,27 @@ const deliveryDate = ref("");
 const isEditMode = ref(false);
 const currentEditingId = ref<string | null>(null);
 
+// Add these new refs to track original values when opening edit modal
+const originalPoNumber = ref('');
+const originalSupplierName = ref('');
+const originalAddress = ref('');
+const originalTinId = ref('');
+const originalProcurementMode = ref('');
+const originalDeliveryDate = ref('');
+
+// Add computed property to determine if fields have changed
+const hasChanges = computed(() => {
+  if (!isEditMode.value) return true; // For new orders, always enable the button
+  
+  // Check if any field has changed
+  return poNumber.value !== originalPoNumber.value ||
+         supplierName.value !== originalSupplierName.value ||
+         address.value !== originalAddress.value ||
+         tin_ID.value !== originalTinId.value ||
+         modeofProcurement.value !== originalProcurementMode.value ||
+         deliveryDate.value !== originalDeliveryDate.value;
+});
+
 const openEditModal = (order: Document) => {
   // Prevent editing if document is completed
   if (order.status === 'Completed') {
@@ -905,6 +926,8 @@ const openEditModal = (order: Document) => {
   }
   isEditMode.value = true;
   currentEditingId.value = order.id;
+  
+  // Set form fields
   poNumber.value = order.orderNumber;
   supplierName.value = order.supplierName;
   address.value = order.address;
@@ -926,6 +949,14 @@ const openEditModal = (order: Document) => {
   } else {
     deliveryDate.value = "";
   }
+  
+  // Save original values for comparison
+  originalPoNumber.value = poNumber.value;
+  originalSupplierName.value = supplierName.value;
+  originalAddress.value = address.value;
+  originalTinId.value = tin_ID.value;
+  originalProcurementMode.value = modeofProcurement.value;
+  originalDeliveryDate.value = deliveryDate.value;
   
   showModal.value = true;
   isOverlayMinimized.value = false;
@@ -1896,7 +1927,12 @@ const areDatesEqual = (date1: string | undefined | null, date2: string | undefin
                   </button>
                   <button
                     @click="submitPO"
-                    class="px-4 py-2 bg-[#6A5CFE] text-white rounded-md hover:bg-[#7C6CFF] transition-colors"
+                    :disabled="isEditMode && !hasChanges"
+                    class="px-4 py-2 rounded-md transition-colors"
+                    :class="{
+                      'bg-[#6A5CFE] text-white hover:bg-[#7C6CFF]': !isEditMode || hasChanges,
+                      'bg-gray-400 text-gray-200 cursor-not-allowed': isEditMode && !hasChanges
+                    }"
                   >
                     {{ isEditMode ? "Update Order" : "Create Order" }}
                   </button>
