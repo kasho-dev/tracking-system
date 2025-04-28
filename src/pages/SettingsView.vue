@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import PocketBase from 'pocketbase';
 
@@ -72,6 +72,13 @@ const showCurrentPassword = ref(false);
 const showNewPassword = ref(false);
 const showConfirmPassword = ref(false);
 
+// Add a ref for tracking email verification status
+const isEmailVerificationSent = ref(false);
+const newEmailAddress = ref('');
+
+// Add this reactive property to track duplicate email errors
+const isDuplicateEmail = ref(false);
+
 const router = useRouter();
 
 // Check if basic info has been changed
@@ -125,11 +132,12 @@ const updateBasicInfo = async () => {
   nameErrorMessage.value = '';
   emailErrorMessage.value = '';
   departmentErrorMessage.value = '';
-  successMessage.value = '';
   errorMessage.value = '';
   imageUploadError.value = '';
   isUpdatingBasicInfo.value = true;
   basicInfoUpdateSuccess.value = false;
+  isEmailVerificationSent.value = false;
+  isDuplicateEmail.value = false;
   
   // Validate form
   let isValid = true;
@@ -168,11 +176,18 @@ const updateBasicInfo = async () => {
       return;
     }
     
-    // Create a FormData object to handle both text fields and file upload
+    // Check if email has changed
+    const emailChanged = email.value !== originalEmail.value;
+    
+    // Prepare form data for the update
     const formData = new FormData();
     formData.append('name', name.value);
-    formData.append('email', email.value);
     formData.append('department', department.value);
+    
+    // Only add email to the update if it hasn't changed
+    if (!emailChanged) {
+      formData.append('email', email.value);
+    }
     
     // Add profile image if it exists
     if (profileImageFile.value) {
@@ -182,40 +197,158 @@ const updateBasicInfo = async () => {
     // Update user data with form data
     await pb.collection('users').update(userId, formData);
     
+    // If email changed, check if it's in use with a direct query
+    if (emailChanged) {
+      try {
+        const checkDuplicateEmail = async () => {
+          try {
+            // Try a direct check of email existence without causing errors
+            const response = await fetch(`${pb.baseUrl}/api/collections/users/records?filter=(email='${email.value}')`, {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': pb.authStore.token ? `Bearer ${pb.authStore.token}` : '',
+              }
+            });
+            
+            if (!response.ok) {
+              return false; // Couldn't check, assume it's not a duplicate
+            }
+            
+            const data = await response.json();
+            return data && data.items && data.items.length > 0;
+          } catch (e) {
+            console.log('Error checking email:', e);
+            return false;
+          }
+        };
+        
+        const isDuplicate = await checkDuplicateEmail();
+        
+        if (isDuplicate) {
+          // Email is already in use, show error
+          emailError.value = true;
+          emailErrorMessage.value = 'Email already in use. Please choose a different email.';
+          isDuplicateEmail.value = true;
+          isUpdatingBasicInfo.value = false;
+          return;
+        }
+        
+        // Email is available, proceed with email change
+        try {
+          // Try to request email change without showing console errors
+          await pb.collection('users').requestEmailChange(email.value).catch(e => {
+            // If this errors out, assume it's a duplicate email
+            isDuplicateEmail.value = true;
+            throw e;
+          });
+          
+          // If we get here, email change request was successful
+          isEmailVerificationSent.value = true;
+          emailError.value = false;
+          emailErrorMessage.value = '';
+          newEmailAddress.value = email.value;
+        } catch (e) {
+          // Handle the error without logging to console
+          emailError.value = true;
+          emailErrorMessage.value = 'Email already in use. Please choose a different email.';
+          isDuplicateEmail.value = true;
+          isUpdatingBasicInfo.value = false;
+          return;
+        }
+      } catch (err) {
+        // General error handler
+        emailError.value = true;
+        emailErrorMessage.value = 'Email already in use. Please choose a different email.';
+        isDuplicateEmail.value = true;
+        isUpdatingBasicInfo.value = false;
+        return;
+      }
+    }
+    
     // Reset profile image file reference after successful upload
     if (profileImageFile.value) {
       profileImageFile.value = null;
       // Refetch user data to get updated avatar URL
       await fetchUserData();
-    } else {
-      // Update original values to match the current values
+    } else if (!emailChanged) {
+      // Only update original values if email didn't change
+      // For email changes, we keep original email until verification completes
       originalName.value = name.value;
       originalEmail.value = email.value;
       originalDepartment.value = department.value;
     }
     
-    successMessage.value = 'Profile information updated successfully';
-    basicInfoUpdateSuccess.value = true;
-    
-    // Reset success state after 3 seconds
-    setTimeout(() => {
-      basicInfoUpdateSuccess.value = false;
-      successMessage.value = '';
-    }, 3000);
-  } catch (error: any) {
-    console.error('Error updating user information:', error);
-    errorMessage.value = 'Failed to update information. Please try again.';
-    
-    // Add a class to shake the button
-    const button = document.querySelector('.basic-info-button');
-    if (button) {
-      button.classList.add('shake-animation');
+    // Set success state only if no errors occurred
+    if (!emailError.value && !nameError.value && !departmentError.value) {
+      basicInfoUpdateSuccess.value = true;
+      
+      // Reset success state after 3 seconds
       setTimeout(() => {
-        button.classList.remove('shake-animation');
-      }, 500);
+        basicInfoUpdateSuccess.value = false;
+      }, 3000);
+    }
+  } catch (error: any) {
+    // Reset success flag to make sure it doesn't show success when there's an error
+    basicInfoUpdateSuccess.value = false;
+    
+    // Check if this is a duplicate email error 
+    if (error.status === 400 && (
+        error.data?.email?.code === 'validation_not_unique' || 
+        JSON.stringify(error).toLowerCase().includes('unique') ||
+        JSON.stringify(error).toLowerCase().includes('already exists') ||
+        JSON.stringify(error).toLowerCase().includes('already in use'))) {
+      
+      emailError.value = true;
+      emailErrorMessage.value = 'Email already in use. Please choose a different email.';
+    } else {
+      // Handle other errors
+      errorMessage.value = 'An error occurred while updating your profile.';
     }
   } finally {
     isUpdatingBasicInfo.value = false;
+  }
+};
+
+// Helper function to check if an email already exists in the system
+const checkEmailExists = async (emailToCheck: string): Promise<boolean> => {
+  try {
+    // First approach: Try with filter
+    const result = await pb.collection('users').getList(1, 1, {
+      filter: `email = "${emailToCheck}"`,
+    });
+    
+    if (result && result.items.length > 0) {
+      return true;
+    }
+    
+    // Second approach: Try with direct API request to the auth endpoint
+    try {
+      // Send a request to the auth API to check if the email exists
+      const response = await fetch(`${pb.baseUrl}/api/collections/users/records?filter=(email='${emailToCheck}')`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': pb.authStore.token ? `Bearer ${pb.authStore.token}` : '',
+        }
+      });
+      
+      const data = await response.json();
+      
+      // Check if any items were returned
+      if (data && data.items && data.items.length > 0) {
+        return true;
+      }
+    } catch (directError) {
+      console.error('Error in direct API check:', directError);
+      // Continue with the flow, don't throw
+    }
+    
+    return false;
+  } catch (error) {
+    console.error('Error checking email existence:', error);
+    // Re-throw to be handled by the caller
+    throw error;
   }
 };
 
@@ -228,7 +361,6 @@ const updatePassword = async () => {
   currentPasswordErrorMessage.value = '';
   newPasswordErrorMessage.value = '';
   confirmPasswordErrorMessage.value = '';
-  successMessage.value = '';
   errorMessage.value = '';
   isUpdatingPassword.value = true;
   passwordUpdateSuccess.value = false;
@@ -284,13 +416,12 @@ const updatePassword = async () => {
       newPassword.value = '';
       confirmPassword.value = '';
       
-      successMessage.value = 'Password updated successfully';
+      // Set success state
       passwordUpdateSuccess.value = true;
       
       // Reset success state after 3 seconds
       setTimeout(() => {
         passwordUpdateSuccess.value = false;
-        successMessage.value = '';
       }, 3000);
     } catch (err: any) {
       console.error('Error in password update request:', err);
@@ -457,11 +588,11 @@ onMounted(() => {
                 type="text" 
                 class="pl-10 w-full p-2 border rounded-md focus-animated"
                 :class="{ 
-                  'border-red-500 input-error': nameError,
+                  'border-red-500 bg-red-50 input-error': nameError,
                 }"
               />
             </div>
-            <p v-if="nameError" class="mt-1 text-sm text-red-600">{{ nameErrorMessage }}</p>
+            <p v-if="nameError" class="mt-1 text-sm text-red-600 font-medium">{{ nameErrorMessage }}</p>
           </div>
           
           <!-- Email with focus animation -->
@@ -478,11 +609,25 @@ onMounted(() => {
                 type="email" 
                 class="pl-10 w-full p-2 border rounded-md focus-animated"
                 :class="{ 
-                  'border-red-500 input-error': emailError 
+                  'border-red-500 bg-red-50 input-error': emailError 
                 }"
               />
             </div>
-            <p v-if="emailError" class="mt-1 text-sm text-red-600">{{ emailErrorMessage }}</p>
+            <p v-if="emailError" class="mt-1 text-sm text-red-600 font-medium">{{ emailErrorMessage }}</p>
+            
+            <!-- Email verification status notification -->
+            <div 
+              v-if="isEmailVerificationSent" 
+              class="mt-3 p-3 bg-blue-50 border border-blue-200 text-blue-800 rounded-md flex items-start"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 mt-0.5 flex-shrink-0 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div class="text-sm">
+                <p class="font-medium">Verification email sent</p>
+                <p class="mt-1">A verification link has been sent to <span class="font-semibold">{{ newEmailAddress || email }}</span>. Please check your inbox and click the link to confirm your new email address.</p>
+              </div>
+            </div>
           </div>
           
           <!-- Department dropdown with focus animation -->
@@ -498,7 +643,7 @@ onMounted(() => {
                 v-model="department" 
                 class="pl-10 w-full p-2 border rounded-md appearance-none bg-white focus-animated"
                 :class="{ 
-                  'border-red-500 input-error': departmentError 
+                  'border-red-500 bg-red-50 input-error': departmentError 
                 }"
               >
                 <option value="" disabled>Select department</option>
@@ -512,7 +657,7 @@ onMounted(() => {
                 </svg>
               </div>
             </div>
-            <p v-if="departmentError" class="mt-1 text-sm text-red-600">{{ departmentErrorMessage }}</p>
+            <p v-if="departmentError" class="mt-1 text-sm text-red-600 font-medium">{{ departmentErrorMessage }}</p>
           </div>
           
           <!-- Role (Read-only) -->
@@ -537,11 +682,11 @@ onMounted(() => {
         <div class="mt-4 flex justify-end">
           <button 
             @click="updateBasicInfo"
-            :disabled="isUpdatingBasicInfo || !basicInfoChanged"
+            :disabled="isUpdatingBasicInfo || (!basicInfoChanged && !isEmailVerificationSent)"
             class="relative px-4 py-2 rounded-md transition-colors overflow-hidden basic-info-button"
             :class="{
-              'bg-[#6A5CFE] text-white hover:bg-[#7C6CFF]': !basicInfoUpdateSuccess && !isUpdatingBasicInfo && basicInfoChanged,
-              'bg-gray-400 text-white cursor-not-allowed': isUpdatingBasicInfo || !basicInfoChanged,
+              'bg-[#6A5CFE] text-white hover:bg-[#7C6CFF]': !basicInfoUpdateSuccess && !isUpdatingBasicInfo && (basicInfoChanged || isEmailVerificationSent),
+              'bg-gray-400 text-white cursor-not-allowed': isUpdatingBasicInfo || (!basicInfoChanged && !isEmailVerificationSent),
               'bg-[#6A5CFE] text-white': basicInfoUpdateSuccess
             }"
           >
@@ -551,7 +696,10 @@ onMounted(() => {
             <div class="relative z-10 flex items-center gap-2">
               <Check v-if="basicInfoUpdateSuccess" class="w-4 h-4" />
               <Save v-else class="w-4 h-4" />
-              {{ isUpdatingBasicInfo ? 'Updating...' : (basicInfoUpdateSuccess ? 'Updated!' : (profileImageFile ? 'Update Profile & Photo' : 'Update Profile')) }}
+              {{ isUpdatingBasicInfo ? 'Updating...' : 
+                 (basicInfoUpdateSuccess ? 'Updated!' : 
+                 (profileImageFile ? 'Update Profile & Photo' : 
+                 (isEmailVerificationSent ? 'Verification Sent' : 'Update Profile'))) }}
             </div>
           </button>
         </div>
@@ -583,13 +731,13 @@ onMounted(() => {
                 type="password" 
                 class="pl-10 w-full p-2 border rounded-md focus-animated"
                 :class="{ 
-                  'border-red-500 input-error': currentPasswordError 
+                  'border-red-500 bg-red-50 input-error': currentPasswordError 
                 }"
                 placeholder="Enter your current password"
               />
               <!-- No visibility toggle button -->
             </div>
-            <p v-if="currentPasswordError" class="mt-1 text-sm text-red-600">{{ currentPasswordErrorMessage }}</p>
+            <p v-if="currentPasswordError" class="mt-1 text-sm text-red-600 font-medium">{{ currentPasswordErrorMessage }}</p>
           </div>
           
           <!-- New Password with focus animation -->
@@ -606,13 +754,13 @@ onMounted(() => {
                 type="password"
                 class="pl-10 w-full p-2 border rounded-md focus-animated"
                 :class="{ 
-                  'border-red-500 input-error': newPasswordError 
+                  'border-red-500 bg-red-50 input-error': newPasswordError 
                 }"
                 placeholder="Create a new password (min 8 chars)"
               />
               <!-- No visibility toggle button -->
             </div>
-            <p v-if="newPasswordError" class="mt-1 text-sm text-red-600">{{ newPasswordErrorMessage }}</p>
+            <p v-if="newPasswordError" class="mt-1 text-sm text-red-600 font-medium">{{ newPasswordErrorMessage }}</p>
           </div>
           
           <!-- Confirm New Password with focus animation -->
@@ -629,13 +777,13 @@ onMounted(() => {
                 type="password"
                 class="pl-10 w-full p-2 border rounded-md focus-animated"
                 :class="{ 
-                  'border-red-500 input-error': confirmPasswordError 
+                  'border-red-500 bg-red-50 input-error': confirmPasswordError 
                 }"
                 placeholder="Re-enter your new password"
               />
               <!-- No visibility toggle button -->
             </div>
-            <p v-if="confirmPasswordError" class="mt-1 text-sm text-red-600">{{ confirmPasswordErrorMessage }}</p>
+            <p v-if="confirmPasswordError" class="mt-1 text-sm text-red-600 font-medium">{{ confirmPasswordErrorMessage }}</p>
           </div>
         </div>
         
@@ -702,31 +850,6 @@ onMounted(() => {
             Delete
           </button>
         </div>
-      </div>
-      
-      <!-- Success Message with animation -->
-      <transition
-        name="message"
-        enter-active-class="transform transition duration-500 ease-out"
-        leave-active-class="transform transition duration-300 ease-in"
-        enter-from-class="opacity-0 scale-95 translate-y-2"
-        enter-to-class="opacity-100 scale-100 translate-y-0"
-        leave-from-class="opacity-100 scale-100"
-        leave-to-class="opacity-0 scale-95"
-      >
-        <div v-if="successMessage" class="bg-green-100 text-green-800 p-4 rounded-md">
-          {{ successMessage }}
-        </div>
-      </transition>
-      
-      <!-- Error Message with animation -->
-      <div 
-        v-if="errorMessage" 
-        class="bg-red-100 text-red-800 p-4 rounded-md flex items-center transform transition-all duration-300 ease-out shake-animation"
-        :class="{ 'translate-y-0 opacity-100': cardEntryComplete, 'translate-y-4 opacity-0': !cardEntryComplete }"
-      >
-        <AlertCircle class="w-5 h-5 mr-2" />
-        {{ errorMessage }}
       </div>
     </div>
   </div>

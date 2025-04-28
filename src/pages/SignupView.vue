@@ -57,9 +57,10 @@
                 v-model="name"
                 required
                 placeholder="Enter your full name"
-                class="w-full px-4 py-3 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                :class="['w-full px-4 py-3 rounded-md border focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200', 
+                  nameError ? 'border-red-500 bg-red-50' : 'border-gray-300']"
               >
-              <p v-if="nameError" class="text-sm text-red-600">{{ nameError }}</p>
+              <p v-if="nameError" class="text-sm text-red-600 font-medium">{{ nameError }}</p>
             </div>
           </transition>
           
@@ -79,9 +80,10 @@
                 v-model="email"
                 required
                 placeholder="Enter your email"
-                class="w-full px-4 py-3 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                :class="['w-full px-4 py-3 rounded-md border focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200', 
+                  emailError ? 'border-red-500 bg-red-50' : 'border-gray-300']"
               >
-              <p v-if="emailError" class="text-sm text-red-600">{{ emailError }}</p>
+              <p v-if="emailError" class="text-sm text-red-600 font-medium">{{ emailError }}</p>
             </div>
           </transition>
           
@@ -280,6 +282,10 @@ export default {
   },
   
   methods: {
+    async verifyCollectionSchema() {
+      // Remove this method as it requires admin authentication
+    },
+    
     validateForm() {
       let isValid = true;
       
@@ -345,6 +351,7 @@ export default {
     },
     
     async handleSignup() {
+      // First validate the form
       if (!this.validateForm()) {
         return;
       }
@@ -353,15 +360,16 @@ export default {
       
       try {
         // Create the user in PocketBase
-        await this.pb.collection('users').create({
+        const userData = {
           email: this.email,
           password: this.password,
           passwordConfirm: this.confirmPassword,
           name: this.name,
           department: this.department,
-          // Set the default role as 'user'
           role: 'user'
-        });
+        };
+        
+        await this.pb.collection('users').create(userData);
         
         // Save credentials before displaying success message
         const savedEmail = this.email;
@@ -383,20 +391,70 @@ export default {
         this.acceptTerms = false;
         
       } catch (error) {
-        console.error('Signup failed:', error);
+        // Reset any previous error messages
+        this.emailError = '';
+        this.nameError = '';
+        this.passwordError = '';
+        this.errorMessage = '';
+
+        // Log the full error response to help debugging
+        if (process.env.NODE_ENV !== 'production') {
+          // eslint-disable-next-line no-console
+          console.error('Signup error details:', error);
+        }
         
-        // Handle specific error cases
-        if (error.data) {
-          // PocketBase ClientResponseError handling
-          if (error.data.email?.code === 'validation_not_unique') {
-            this.errorMessage = 'This email is already registered. Please use a different email or try logging in.';
-          } else if (error.data.password) {
-            this.passwordError = 'Password validation failed: ' + error.data.password.message;
+        // Handle PocketBase ClientResponseError
+        if (error.response && error.response.data) {
+          // Handle response format from some PocketBase versions
+          const data = error.response.data;
+          
+          if (data.email && data.email.code === 'validation_not_unique') {
+            this.emailError = 'Email already exists. Please use a different email.';
+          } else if (data.name && data.name.code === 'validation_not_unique') {
+            this.nameError = 'Name already in use. Please choose a different name.';
+          }
+        } else if (error.data) {
+          // Standard PocketBase error format
+          const data = error.data;
+
+          // Check for specific field errors
+          if (data.email) {
+            if (data.email.code === 'validation_not_unique') {
+              this.emailError = 'Email already exists. Please use a different email.';
+            } else {
+              this.emailError = data.email.message || 'Invalid email format';
+            }
+          }
+          
+          if (data.name) {
+            if (data.name.code === 'validation_not_unique') {
+              this.nameError = 'Name already in use. Please choose a different name.';
+            } else {
+              this.nameError = data.name.message || 'Invalid name format';
+            }
+          }
+          
+          if (data.password) {
+            this.passwordError = data.password.message || 'Invalid password';
+          }
+        } else if (error.message) {
+          // Extract field errors from the error message if possible
+          const msg = error.message.toLowerCase();
+          
+          if (msg.includes('email') && msg.includes('unique')) {
+            this.emailError = 'Email already exists. Please use a different email.';
+          } else if (msg.includes('name') && msg.includes('unique')) {
+            this.nameError = 'Name already in use. Please choose a different name.';
           } else {
-            this.errorMessage = error.message || 'Failed to create account. Please check your information and try again.';
+            this.errorMessage = error.message;
           }
         } else {
-          this.errorMessage = 'An error occurred during signup. Please try again later.';
+          this.errorMessage = 'Failed to create account. Please try again later.';
+        }
+
+        // If we have no specific field errors but got an error response, show a general message
+        if (!this.emailError && !this.nameError && !this.passwordError && !this.errorMessage) {
+          this.errorMessage = 'Failed to create account. Please check your information and try again.';
         }
       } finally {
         this.isLoading = false;
