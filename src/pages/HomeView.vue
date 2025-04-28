@@ -1901,7 +1901,7 @@ const areDatesEqual = (date1: string | undefined | null, date2: string | undefin
                     v-model="deliveryDate"
                     type="datetime-local"
                     :min="minDeliveryDate"
-                    class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert"
                     :class="{
                       'border-red-500': showDeliveryDateError || dateError,
                     }"
