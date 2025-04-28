@@ -251,7 +251,7 @@ const updateBasicInfo = async () => {
         } catch (e) {
           // Handle the error without logging to console
           emailError.value = true;
-          emailErrorMessage.value = 'Email already in use. Please choose a different email.';
+            emailErrorMessage.value = 'Email already in use. Please choose a different email.';
           isDuplicateEmail.value = true;
           isUpdatingBasicInfo.value = false;
           return;
@@ -281,12 +281,12 @@ const updateBasicInfo = async () => {
     
     // Set success state only if no errors occurred
     if (!emailError.value && !nameError.value && !departmentError.value) {
-      basicInfoUpdateSuccess.value = true;
-      
-      // Reset success state after 3 seconds
-      setTimeout(() => {
-        basicInfoUpdateSuccess.value = false;
-      }, 3000);
+    basicInfoUpdateSuccess.value = true;
+    
+    // Reset success state after 3 seconds
+    setTimeout(() => {
+      basicInfoUpdateSuccess.value = false;
+    }, 3000);
     }
   } catch (error: any) {
     // Reset success flag to make sure it doesn't show success when there's an error
@@ -300,8 +300,8 @@ const updateBasicInfo = async () => {
         JSON.stringify(error).toLowerCase().includes('already in use'))) {
       
       emailError.value = true;
-      emailErrorMessage.value = 'Email already in use. Please choose a different email.';
-    } else {
+          emailErrorMessage.value = 'Email already in use. Please choose a different email.';
+        } else {
       // Handle other errors
       errorMessage.value = 'An error occurred while updating your profile.';
     }
@@ -520,8 +520,10 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="bg-[#0A0E1A] min-h-screen p-6">
-    <div class="max-w-4xl mx-auto space-y-6">
+  <div
+    class="min-h-screen animated-bg relative overflow-hidden p-4 md:p-6"
+  >
+    <div class="space-y-6 max-w-3xl mx-auto">
       <!-- Basic Information Card with animation -->
       <div 
         class="bg-white rounded-lg shadow p-6 transform transition-all duration-500 ease-out"
@@ -892,5 +894,23 @@ onMounted(() => {
 /* Input error animation */
 .input-error {
   animation: shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+/* Animated gradient background */
+@keyframes gradientBG {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+.animated-bg {
+  background: linear-gradient(135deg, #0a0e1a, #1a1f36, #0a0e1a);
+  background-size: 400% 400%;
+  animation: gradientBG 20s ease infinite;
 }
 </style> 
