@@ -151,7 +151,7 @@ const shouldMarkAsLapsed = (doc: {
   status: string;
 }): boolean => {
   // Skip if not in lapse-eligible status
-  if (!['Pending', 'Needs Action'].includes(doc.status)) return false;
+  if (!['Pending', 'Needs Action', 'Extended', 'Verified'].includes(doc.status)) return false;
   
   // Skip if no valid delivery date
   if (!doc.deliveryDate) return false;
@@ -447,7 +447,7 @@ const verifyDocument = async () => {
     };
 
     // ADMIN HANDLES ALL VERIFICATION STEPS
-    if (selectedOrder.value.status === "Pending") {
+    if (selectedOrder.value.status === "Pending" || selectedOrder.value.status === "Extended") {
       // INITIAL VERIFICATION
       newStatus = "Needs Action";
       verificationType = "initial";
@@ -501,15 +501,6 @@ const verifyDocument = async () => {
 
       return;
     }
-
-    // } else if (currentUser.value.role === "supplier") {
-    //   if (selectedOrder.value.status === "Needs Action") {
-    //     newStatus = "Verified";
-    //     verificationType = "acknowledgement";
-    //   } else {
-    //     return;
-    //   }
-    // }
 
     // For non-completion updates
     const verificationEvents = selectedOrder.value.verificationEvents || [];
@@ -766,6 +757,7 @@ const getVerificationTitle = (type: string): string => {
     completed: "Document Completed",
     undo: "Cancelled Verification",
     lapsed: "Document Lapsed",
+    extend: "Document Extended",
     edit: "Document Edited",
     modify: "Document Modified"
   };
@@ -1015,9 +1007,27 @@ const fetchDocuments = async () => {
           // Update in PocketBase if not already marked
           if (record.status !== "Lapsed") {
             try {
+              // Add a lapsed event to the timeline, showing delivery date change
+              const lapsedEvent = {
+                type: "lapsed",
+                timestamp: new Date().toISOString(),
+                userId: "system",
+                userName: "System",
+                modifiedFields: {
+                  deliveryDate: {
+                    changed: true,
+                    oldValue: formatDeliveryDateTime(record.deliveryDate),
+                    newValue: "Lapsed" // or you can use an empty string or a message
+                  }
+                }
+              };
               await pb.collection("Collection_1").update(record.id, {
                 status: "Lapsed",
                 updated: new Date().toISOString(),
+                verificationEvents: [
+                  ...(record.verificationEvents || []),
+                  lapsedEvent
+                ]
               });
             } catch (error) {
               console.error("Error updating document status:", error);
@@ -1087,7 +1097,6 @@ const fetchDocuments = async () => {
 const submitPO = async () => {
   //reset validation first
   if (!validateDeliveryDate()) {
-    // alert("Error: Delivery date must be in the future");
     return;
   }
   // Reset all errors first
@@ -1174,6 +1183,8 @@ const submitPO = async () => {
     modeofProcurement: modeofProcurement.value,
     deliveryDate: formattedDeliveryDate,
     updated: new Date().toISOString(),
+    // Change status to "Extended" if it was "Lapsed"
+    status: isEditMode.value && selectedOrder.value?.status === "Lapsed" ? "Extended" : selectedOrder.value?.status || "Pending",
     // Only set createdBy and createdByName for new documents
     ...(isEditMode.value ? {} : {
       createdBy: creatorId,
@@ -1187,7 +1198,7 @@ const submitPO = async () => {
       verificationEvents: [
         ...(selectedOrder.value?.verificationEvents || []),
         {
-          type: "modify",
+          type: isEditMode.value && selectedOrder.value?.status === "Lapsed" ? "extend" : "modify",
           timestamp: new Date().toISOString(),
           userId: currentUser.value?.id || "system",
           userName: currentUser.value?.name || currentUser.value?.email || "System",
@@ -1224,7 +1235,8 @@ const submitPO = async () => {
                 undefined,
               newValue: formatDeliveryDateTime(formattedDeliveryDate) || ''
             }
-          }
+          },
+          description: isEditMode.value && selectedOrder.value?.status === "Lapsed" ? `New Delivery Date: ${formatDeliveryDateTime(formattedDeliveryDate)}` : undefined
         }
       ]
     } : {})
@@ -1591,13 +1603,50 @@ const filteredDocuments = computed(() => {
 
   // Apply search filter if there's a query
   if (searchStore.searchQuery) {
-    filtered = filtered.filter((doc) =>
-      Object.values(doc).some((field) =>
-        String(field)
-          .toLowerCase()
-          .includes(searchStore.searchQuery.toLowerCase())
-      )
-    );
+    const query = searchStore.searchQuery.toLowerCase();
+    filtered = filtered.filter((doc) => {
+      return Object.entries(doc).some(([key, field]) => {
+        if (typeof field === 'string') {
+          // Try to match raw string
+          if (field.toLowerCase().includes(query)) return true;
+          // If it's a date field, also try to match formatted date in multiple formats
+          if (key.toLowerCase().includes('date')) {
+            const date = new Date(field);
+            if (!isNaN(date.getTime())) {
+              // Common formats
+              const formats = [
+                date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+                date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+                date.toLocaleDateString('en-US'),
+                date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', weekday: 'long' }),
+                date.toLocaleString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }),
+                date.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }),
+                date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' }),
+                date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' }),
+              ];
+              if (formats.some(f => f.toLowerCase().includes(query))) return true;
+            }
+          }
+        }
+        // Explicitly check supplier info fields
+        if ([
+          'supplierName',
+          'address',
+          'tin_ID',
+          'modeofProcurement',
+          'orderNumber',
+          'trackingId',
+          'handledBy',
+          'createdBy',
+          'createdByName',
+          'status',
+          'fileType',
+        ].includes(key) && typeof field === 'string') {
+          if (field.toLowerCase().includes(query)) return true;
+        }
+        return false;
+      });
+    });
   }
 
   // Filter by active button status
@@ -1612,6 +1661,8 @@ const filteredDocuments = computed(() => {
     );
   } else if (activeButton.value === "Lapsed") {
     filtered = filtered.filter((doc) => doc.status === "Lapsed");
+  } else if (activeButton.value === "Extended") {
+    filtered = filtered.filter((doc) => doc.status === "Extended");
   }
 
   return filtered;
@@ -1729,6 +1780,37 @@ const areDatesEqual = (date1: string | undefined | null, date2: string | undefin
     return false;
   }
 };
+
+// Helper: Get last verification step for Extended docs
+const getNextVerificationStep = computed(() => {
+  if (!selectedOrder.value || selectedOrder.value.status !== 'Extended') return null;
+  const events = selectedOrder.value.verificationEvents || [];
+  // Only consider main flow steps
+  const mainSteps = ['initial', 'sent to supplier', 'final', 'completed', 'document created'];
+  let undoneSteps: string[] = [];
+  let foundMainStep = false;
+  // Go backwards through the timeline
+  for (let i = events.length - 1; i >= 0; i--) {
+    const type = events[i].type;
+    const action = (events[i] as any).action;
+    if (type === 'undo' && action) {
+      if (action.includes('Verified to Needs Action')) {
+        undoneSteps.push('sent to supplier');
+      } else if (action.includes('Needs Action to Pending')) {
+        undoneSteps.push('initial');
+      }
+    } else if (mainSteps.includes(type) && !undoneSteps.includes(type)) {
+      foundMainStep = true;
+      if (type === 'document created') return 'initial';
+      if (type === 'initial') return 'sent to supplier';
+      if (type === 'sent to supplier') return 'final';
+      if (type === 'final' || type === 'completed') return null;
+    }
+  }
+  // If no main step found and doc is Extended, default to 'initial'
+  if (!foundMainStep) return 'initial';
+  return 'initial';
+});
 </script>
 
 <template>
@@ -1957,8 +2039,8 @@ const areDatesEqual = (date1: string | undefined | null, date2: string | undefin
               class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
               :class="
                 activeButton === 'Documents'
-                  ? 'bg-[#2E3347] text-purple-400'
-                  : 'text-purple-400 hover:bg-[#2E3347]'
+                  ? 'bg-[#2E3347] text-blue-400'
+                  : 'text-blue-400 hover:bg-[#2E3347]'
               "
             >
               <span class="flex items-center gap-2 sidebar-button-content">
@@ -2052,6 +2134,41 @@ const areDatesEqual = (date1: string | undefined | null, date2: string | undefin
             >
               <span class="flex items-center gap-2"><TriangleAlert /> Lapsed</span>
               <span class="text-white">{{ statusCounts.Lapsed || 0 }}</span>
+            </div>
+          </transition>
+
+          <!-- Extended -->
+          <transition
+            appear
+            enter-active-class="transition-all duration-500 ease-out"
+            enter-from-class="opacity-0 transform -translate-x-10"
+            enter-to-class="opacity-100 transform translate-x-0"
+          >
+            <div
+              @click="setActive('Extended')"
+              class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
+              :class="
+                activeButton === 'Extended'
+                  ? 'bg-[#2E3347] text-orange-400'
+                  : 'text-orange-400 hover:bg-[#2E3347]'
+              "
+            >
+              <span class="flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                  <line x1="16" y1="2" x2="16" y2="6"></line>
+                  <line x1="8" y1="2" x2="8" y2="6"></line>
+                  <line x1="3" y1="10" x2="21" y2="10"></line>
+                  <path d="M8 14h.01"></path>
+                  <path d="M12 14h.01"></path>
+                  <path d="M16 14h.01"></path>
+                  <path d="M8 18h.01"></path>
+                  <path d="M12 18h.01"></path>
+                  <path d="M16 18h.01"></path>
+                </svg>
+                Extended
+              </span>
+              <span class="text-white">{{ statusCounts.Extended || 0 }}</span>
             </div>
           </transition>
         </div>
@@ -2323,6 +2440,8 @@ const areDatesEqual = (date1: string | undefined | null, date2: string | undefin
                       'bg-red-100 text-red-800':
                         selectedOrder?.status === 'Needs Action' ||
                         selectedOrder?.status === 'Lapsed',
+                      'bg-orange-100 text-orange-800':
+                        selectedOrder?.status === 'Extended',
                       'bg-gray-100 text-gray-800': !selectedOrder?.status,
                     }"
                   >
@@ -2432,10 +2551,8 @@ const areDatesEqual = (date1: string | undefined | null, date2: string | undefin
               <!-- Overlay Timeline Action Buttons -->
               <div class="mt-4 flex flex-wrap gap-2">
                 <template v-if="isAdmin">
-                  <div
-                    v-if="selectedOrder?.status === 'Pending'"
-                    class="flex gap-2"
-                  >
+                  <!-- For Pending or Extended, but Extended uses step logic -->
+                  <div v-if="selectedOrder?.status === 'Pending'" class="flex gap-2">
                     <button
                       @click="verifyDocument"
                       class="px-4 py-2 bg-blue-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/50 active:scale-95 active:shadow-blue-500/75 active:bg-blue-700"
@@ -2443,11 +2560,33 @@ const areDatesEqual = (date1: string | undefined | null, date2: string | undefin
                       Initial Verify
                     </button>
                   </div>
-
-                  <div
-                    v-if="selectedOrder?.status === 'Needs Action'"
-                    class="flex gap-2"
-                  >
+                  <!-- Extended: show correct step -->
+                  <div v-if="selectedOrder?.status === 'Extended' && getNextVerificationStep === 'initial'" class="flex gap-2">
+                    <button
+                      @click="verifyDocument"
+                      class="px-4 py-2 bg-blue-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/50 active:scale-95 active:shadow-blue-500/75 active:bg-blue-700"
+                    >
+                      Initial Verify
+                    </button>
+                  </div>
+                  <div v-if="selectedOrder?.status === 'Extended' && getNextVerificationStep === 'sent to supplier'" class="flex gap-2">
+                    <button
+                      @click="verifyDocument"
+                      class="px-4 py-2 bg-purple-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-purple-600 hover:shadow-lg hover:shadow-purple-500/50 active:scale-95 active:shadow-purple-500/75 active:bg-purple-700"
+                    >
+                      Mark as Sent to Supplier
+                    </button>
+                  </div>
+                  <div v-if="selectedOrder?.status === 'Extended' && getNextVerificationStep === 'final'" class="flex gap-2">
+                    <button
+                      @click="verifyDocument"
+                      class="px-4 py-2 bg-green-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-green-600 hover:shadow-lg hover:shadow-green-500/50 active:scale-95 active:shadow-green-500/75 active:bg-green-700"
+                    >
+                      Mark as Received & Verified
+                    </button>
+                  </div>
+                  <!-- Needs Action -->
+                  <div v-if="selectedOrder?.status === 'Needs Action'" class="flex gap-2">
                     <button
                       @click="verifyDocument"
                       class="px-4 py-2 bg-purple-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-purple-600 hover:shadow-lg hover:shadow-purple-500/50 active:scale-95 active:shadow-purple-500/75 active:bg-purple-700"
@@ -2461,11 +2600,8 @@ const areDatesEqual = (date1: string | undefined | null, date2: string | undefin
                       Undo
                     </button>
                   </div>
-
-                  <div
-                    v-if="selectedOrder?.status === 'Verified'"
-                    class="flex gap-2"
-                  >
+                  <!-- Verified -->
+                  <div v-if="selectedOrder?.status === 'Verified'" class="flex gap-2">
                     <button
                       @click="verifyDocument"
                       class="px-4 py-2 bg-green-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-green-600 hover:shadow-lg hover:shadow-green-500/50 active:scale-95 active:shadow-green-500/75 active:bg-green-700"
