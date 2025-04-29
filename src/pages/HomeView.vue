@@ -1825,8 +1825,12 @@ const getNextVerificationStep = computed(() => {
       <div class="sidebar w-64 bg-[#0A0E1A] text-white mr-4 rounded-lg">
         <button
           @click="openModalAdd"
-          class="w-full flex items-center justify-center gap-2 bg-[#6A5CFE] text-white text-sm font-semibold py-3 rounded-xl hover:bg-[#7C6CFF] active:bg-[#5A4BD9] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 ease-out"
+          class="w-full flex items-center justify-center gap-2 bg-[#6A5CFE] text-white text-sm font-semibold py-3 rounded-xl 
+          hover:bg-[#7C6CFF] hover:shadow-lg hover:shadow-[#6A5CFE]/30 active:bg-[#5A4BD9] active:scale-[0.98] 
+          transition-all duration-300 ease-out relative overflow-hidden group"
         >
+          <span class="absolute inset-0 bg-gradient-to-r from-[#7C6CFF]/0 via-[#7C6CFF]/10 to-[#7C6CFF]/0 
+          group-hover:translate-x-full transition-transform duration-1000 ease-in-out"></span>
           <svg
             xmlns="http://www.w3.org/2000/svg"
             width="20"
@@ -1837,14 +1841,14 @@ const getNextVerificationStep = computed(() => {
             stroke-width="2"
             stroke-linecap="round"
             stroke-linejoin="round"
-            class="text-white"
+            class="text-white group-hover:scale-110 transition-transform duration-300"
           >
             <path d="M13.234 20.252 21 12.3" />
             <path
               d="m16 6-8.414 8.586a2 2 0 0 0 0 2.828 2 2 0 0 0 2.828 0l8.414-8.586a4 4 0 0 0 0-5.656 4 4 0 0 0-5.656 0l-8.415 8.585a6 6 0 1 0 8.486 8.486"
             />
           </svg>
-          Add Purchasing Order
+          <span class="relative z-10 group-hover:translate-x-0.5 transition-transform duration-300">Add Purchasing Order</span>
         </button>
 
         <!-- Modal Transition -->
