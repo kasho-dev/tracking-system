@@ -2004,7 +2004,7 @@ const getNextVerificationStep = computed(() => {
                 <div class="flex justify-end gap-2 mt-6">
                   <button
                     @click="closeModalAdd"
-                    class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                    class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 hover:scale-[1.02] transition-colors"
                   >
                     Cancel
                   </button>
@@ -2013,7 +2013,7 @@ const getNextVerificationStep = computed(() => {
                     :disabled="isEditMode && !hasChanges"
                     class="px-4 py-2 rounded-md transition-colors"
                     :class="{
-                      'bg-[#6A5CFE] text-white hover:bg-[#7C6CFF]': !isEditMode || hasChanges,
+                      'bg-[#6A5CFE] text-white hover:bg-[#7C6CFF] hover:scale-[1.02] transition-colors': !isEditMode || hasChanges,
                       'bg-gray-400 text-gray-200 cursor-not-allowed': isEditMode && !hasChanges
                     }"
                   >
@@ -2036,18 +2036,18 @@ const getNextVerificationStep = computed(() => {
           >
             <div
               @click="setActive('Documents')"
-              class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
+              class="flex items-center justify-between mx-1 px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:bg-opacity-90 hover:shadow-md hover:shadow-[#6A5CFE]/20 hover:scale-[1.02]"
               :class="
                 activeButton === 'Documents'
-                  ? 'bg-[#2E3347] text-blue-400'
+                  ? 'bg-[#2E3347] text-blue-400 border-blue-400 active-pulse'
                   : 'text-blue-400 hover:bg-[#2E3347]'
               "
             >
               <span class="flex items-center gap-2 sidebar-button-content">
-                <File />
+                <File class="transition-colors duration-300" />
                 <span class="sidebar-button-text">All</span>
               </span>
-              <span class="text-white">{{ documents.length }}</span>
+              <span class="text-white bg-blue-500/20 px-2 py-0.5 rounded-full text-xs">{{ documents.length }}</span>
             </div>
           </transition>
 
@@ -2060,15 +2060,18 @@ const getNextVerificationStep = computed(() => {
           >
             <div
               @click="setActive('Completed')"
-              class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer font-semibold transition-all duration-300 ease-in-out hover:translate-x-2"
+              class="flex items-center justify-between mx-1 px-4 py-3 rounded-lg cursor-pointer font-semibold transition-all duration-10 ease-in-out hover:bg-opacity-90 hover:shadow-md hover:shadow-green-500/20 hover:scale-[1.02]"
               :class="
                 activeButton === 'Completed'
-                  ? 'bg-[#2E3347] text-green-400'
+                  ? 'bg-[#2E3347] text-green-400 border-green-400 active-pulse'
                   : 'text-green-400 hover:bg-[#2E3347]'
               "
             >
-              <span class="flex items-center gap-2"><Check /> Completed</span>
-              <span class="text-white">{{ statusCounts.Completed || 0 }}</span>
+              <span class="flex items-center gap-2">
+                <Check class="transition-colors duration-300" /> 
+                <span>Completed</span>
+              </span>
+              <span class="text-white bg-green-500/20 px-2 py-0.5 rounded-full text-xs">{{ statusCounts.Completed || 0 }}</span>
             </div>
           </transition>
 
@@ -2081,15 +2084,18 @@ const getNextVerificationStep = computed(() => {
           >
             <div
               @click="setActive('Pending')"
-              class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
+              class="flex items-center justify-between mx-1 px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:bg-opacity-90 hover:shadow-md hover:shadow-purple-500/20 hover:scale-[1.02]"
               :class="
                 activeButton === 'Pending'
-                  ? 'bg-[#2E3347] text-purple-400'
+                  ? 'bg-[#2E3347] text-purple-400 border-purple-400 active-pulse'
                   : 'text-purple-400 hover:bg-[#2E3347]'
               "
             >
-              <span class="flex items-center gap-2"><Clock /> Pending</span>
-              <span class="text-white">{{ statusCounts.Pending || 0 }}</span>
+              <span class="flex items-center gap-2">
+                <Clock class="transition-colors duration-300" /> 
+                <span>Pending</span>
+              </span>
+              <span class="text-white bg-purple-500/20 px-2 py-0.5 rounded-full text-xs">{{ statusCounts.Pending || 0 }}</span>
             </div>
           </transition>
 
@@ -2102,15 +2108,18 @@ const getNextVerificationStep = computed(() => {
           >
             <div
               @click="setActive('Needs Action')"
-              class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
+              class="flex items-center justify-between mx-1 px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:bg-opacity-90 hover:shadow-md hover:shadow-yellow-500/20 hover:scale-[1.02]"
               :class="
                 activeButton === 'Needs Action'
-                  ? 'bg-[#2E3347] text-yellow-400'
+                  ? 'bg-[#2E3347] text-yellow-400 border-yellow-400 active-pulse'
                   : 'text-yellow-400 hover:bg-[#2E3347]'
               "
             >
-              <span class="flex items-center gap-2"><User /> Needs Action</span>
-              <span class="text-white">{{
+              <span class="flex items-center gap-2">
+                <User class="transition-colors duration-300" /> 
+                <span>Needs Action</span>
+              </span>
+              <span class="text-white bg-yellow-500/20 px-2 py-0.5 rounded-full text-xs">{{
                 statusCounts["Needs Action"] || 0
               }}</span>
             </div>
@@ -2125,15 +2134,18 @@ const getNextVerificationStep = computed(() => {
           >
             <div
               @click="setActive('Lapsed')"
-              class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
+              class="flex items-center justify-between mx-1 px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:bg-opacity-90 hover:shadow-md hover:shadow-red-500/20 hover:scale-[1.02]"
               :class="
                 activeButton === 'Lapsed'
-                  ? 'bg-[#2E3347] text-red-500'
+                  ? 'bg-[#2E3347] text-red-500 border-red-500 active-pulse'
                   : 'text-red-500 hover:bg-[#2E3347]'
               "
             >
-              <span class="flex items-center gap-2"><TriangleAlert /> Lapsed</span>
-              <span class="text-white">{{ statusCounts.Lapsed || 0 }}</span>
+              <span class="flex items-center gap-2">
+                <TriangleAlert class="transition-colors duration-300" /> 
+                <span>Lapsed</span>
+              </span>
+              <span class="text-white bg-red-500/20 px-2 py-0.5 rounded-full text-xs">{{ statusCounts.Lapsed || 0 }}</span>
             </div>
           </transition>
 
@@ -2146,15 +2158,15 @@ const getNextVerificationStep = computed(() => {
           >
             <div
               @click="setActive('Extended')"
-              class="flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:translate-x-2"
+              class="flex items-center justify-between mx-1 px-4 py-3 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:bg-opacity-90 hover:shadow-md hover:shadow-orange-500/20 hover:scale-[1.02]"
               :class="
                 activeButton === 'Extended'
-                  ? 'bg-[#2E3347] text-orange-400'
+                  ? 'bg-[#2E3347] text-orange-400 border-orange-400 active-pulse'
                   : 'text-orange-400 hover:bg-[#2E3347]'
               "
             >
-              <span class="flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <span class="flex items-center gap-2 group">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="transition-colors duration-300">
                   <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
                   <line x1="16" y1="2" x2="16" y2="6"></line>
                   <line x1="8" y1="2" x2="8" y2="6"></line>
@@ -2166,9 +2178,9 @@ const getNextVerificationStep = computed(() => {
                   <path d="M12 18h.01"></path>
                   <path d="M16 18h.01"></path>
                 </svg>
-                Extended
+                <span>Extended</span>
               </span>
-              <span class="text-white">{{ statusCounts.Extended || 0 }}</span>
+              <span class="text-white bg-orange-500/20 px-2 py-0.5 rounded-full text-xs">{{ statusCounts.Extended || 0 }}</span>
             </div>
           </transition>
         </div>
@@ -2849,6 +2861,7 @@ tbody tr:hover {
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap; /* Keep text in single line */
+  position: relative; /* Enable positioning for effects */
 }
 
 /* Count badge */
@@ -2867,6 +2880,148 @@ tbody tr:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* New custom styles for sidebar */
+.sidebar-buttons > div {
+  position: relative;
+  overflow: hidden;
+}
+
+.sidebar-buttons > div::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: currentColor;
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+  z-index: 0;
+  border-radius: 0.5rem;
+}
+
+.sidebar-buttons > div:hover::before {
+  opacity: 0.05;
+}
+
+.sidebar-buttons > div span {
+  z-index: 1;
+  position: relative;
+}
+
+/* Active button style with subtle pulse animation */
+.sidebar-buttons > div.active-pulse {
+  animation: pulse 2s infinite;
+}
+
+.sidebar-buttons > div.active-pulse[class*="text-blue"] {
+  animation: pulse-blue 2s infinite;
+}
+
+.sidebar-buttons > div.active-pulse[class*="text-green"] {
+  animation: pulse-green 2s infinite;
+}
+
+.sidebar-buttons > div.active-pulse[class*="text-purple"] {
+  animation: pulse-purple 2s infinite;
+}
+
+.sidebar-buttons > div.active-pulse[class*="text-yellow"] {
+  animation: pulse-yellow 2s infinite;
+}
+
+.sidebar-buttons > div.active-pulse[class*="text-red"] {
+  animation: pulse-red 2s infinite;
+}
+
+.sidebar-buttons > div.active-pulse[class*="text-orange"] {
+  animation: pulse-orange 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(106, 92, 254, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(106, 92, 254, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(106, 92, 254, 0);
+  }
+}
+
+@keyframes pulse-blue {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(59, 130, 246, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+}
+
+@keyframes pulse-green {
+  0% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(52, 211, 153, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0);
+  }
+}
+
+@keyframes pulse-purple {
+  0% {
+    box-shadow: 0 0 0 0 rgba(167, 139, 250, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(167, 139, 250, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(167, 139, 250, 0);
+  }
+}
+
+@keyframes pulse-yellow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(251, 191, 36, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0);
+  }
+}
+
+@keyframes pulse-red {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+@keyframes pulse-orange {
+  0% {
+    box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(249, 115, 22, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(249, 115, 22, 0);
+  }
 }
 
 .timeline-item {

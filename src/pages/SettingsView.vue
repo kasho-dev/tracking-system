@@ -78,6 +78,11 @@ const newEmailAddress = ref('');
 
 // Add this reactive property to track duplicate email errors
 const isDuplicateEmail = ref(false);
+// Add this reactive property to track duplicate name errors 
+const isDuplicateName = ref(false);
+
+// Add this reactive property to track password verification status
+const isVerifyingPassword = ref(false);
 
 const router = useRouter();
 
@@ -87,6 +92,13 @@ const basicInfoChanged = computed(() => {
          email.value !== originalEmail.value || 
          department.value !== originalDepartment.value ||
          profileImageFile.value !== null;
+});
+
+// Check if password fields are filled out
+const passwordFieldsHaveValues = computed(() => {
+  return currentPassword.value.trim() !== '' && 
+         newPassword.value.trim() !== '' && 
+         confirmPassword.value.trim() !== '';
 });
 
 // Fetch user data
@@ -138,6 +150,7 @@ const updateBasicInfo = async () => {
   basicInfoUpdateSuccess.value = false;
   isEmailVerificationSent.value = false;
   isDuplicateEmail.value = false;
+  isDuplicateName.value = false;
   
   // Validate form
   let isValid = true;
@@ -174,6 +187,23 @@ const updateBasicInfo = async () => {
     if (!userId) {
       isUpdatingBasicInfo.value = false;
       return;
+    }
+    
+    // Check if name has changed and if it exists already
+    const nameChanged = name.value !== originalName.value;
+    if (nameChanged) {
+      try {
+        const nameExists = await checkNameExists(name.value);
+        if (nameExists) {
+          nameError.value = true;
+          nameErrorMessage.value = 'Name already in use. Please choose a different name.';
+          isDuplicateName.value = true;
+          isUpdatingBasicInfo.value = false;
+          return;
+        }
+      } catch (err) {
+        console.error('Error checking name:', err);
+      }
     }
     
     // Check if email has changed
@@ -296,36 +326,96 @@ const updateBasicInfo = async () => {
       originalName.value = name.value;
       originalEmail.value = email.value;
       originalDepartment.value = department.value;
+      isDuplicateName.value = false;
     }
     
     // Set success state only if no errors occurred
     if (!emailError.value && !nameError.value && !departmentError.value) {
     basicInfoUpdateSuccess.value = true;
+    isDuplicateName.value = false;
     
     // Reset success state after 3 seconds
     setTimeout(() => {
       basicInfoUpdateSuccess.value = false;
-    }, 3000);
+    }, 10000);
     }
   } catch (error: any) {
     // Reset success flag to make sure it doesn't show success when there's an error
     basicInfoUpdateSuccess.value = false;
     
-    // Check if this is a duplicate email error 
+    // Check if this is a duplicate name error
     if (error.status === 400 && (
+        error.data?.name?.code === 'validation_not_unique' || 
+        (JSON.stringify(error).toLowerCase().includes('unique') && 
+         JSON.stringify(error).toLowerCase().includes('name')))) {
+      
+      nameError.value = true;
+      nameErrorMessage.value = 'Name already in use. Please choose a different name.';
+    }
+    // Check if this is a duplicate email error 
+    else if (error.status === 400 && (
         error.data?.email?.code === 'validation_not_unique' || 
         JSON.stringify(error).toLowerCase().includes('unique') ||
         JSON.stringify(error).toLowerCase().includes('already exists') ||
         JSON.stringify(error).toLowerCase().includes('already in use'))) {
       
       emailError.value = true;
-          emailErrorMessage.value = 'Email already in use. Please choose a different email.';
-        } else {
+      emailErrorMessage.value = 'Email already in use. Please choose a different email.';
+    } else {
       // Handle other errors
       errorMessage.value = 'An error occurred while updating your profile.';
     }
   } finally {
     isUpdatingBasicInfo.value = false;
+  }
+};
+
+// Helper function to check if a name already exists in the system
+const checkNameExists = async (nameToCheck: string): Promise<boolean> => {
+  try {
+    // First approach: Try with filter
+    const result = await pb.collection('users').getList(1, 1, {
+      filter: `name = "${nameToCheck}"`,
+    });
+    
+    if (result && result.items.length > 0) {
+      // Exclude current user from the check
+      const currentUserId = pb.authStore.model?.id;
+      if (currentUserId && result.items[0].id === currentUserId) {
+        return false; // It's the current user's name, so not a duplicate
+      }
+      return true;
+    }
+    
+    // Second approach: Try with direct API request
+    try {
+      const response = await fetch(`${pb.baseUrl}/api/collections/users/records?filter=(name='${nameToCheck}')`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': pb.authStore.token ? `Bearer ${pb.authStore.token}` : '',
+        }
+      });
+      
+      const data = await response.json();
+      
+      // Check if any items were returned (excluding current user)
+      if (data && data.items && data.items.length > 0) {
+        const currentUserId = pb.authStore.model?.id;
+        // Filter out the current user's record
+        const otherUsers = data.items.filter((item: any) => item.id !== currentUserId);
+        return otherUsers.length > 0;
+      }
+    } catch (directError) {
+      console.error('Error in direct API check for name:', directError);
+      // Continue with the flow, don't throw
+    }
+    
+    return false;
+  } catch (error) {
+    console.error('Error checking name existence:', error);
+    // Re-throw to be handled by the caller
+    throw error;
   }
 };
 
@@ -367,6 +457,43 @@ const checkEmailExists = async (emailToCheck: string): Promise<boolean> => {
   } catch (error) {
     console.error('Error checking email existence:', error);
     // Re-throw to be handled by the caller
+    throw error;
+  }
+};
+
+// Helper function to verify if the current password is correct
+const verifyCurrentPassword = async (password: string): Promise<boolean> => {
+  try {
+    // Get current user data
+    const userId = pb.authStore.model?.id;
+    const userEmail = pb.authStore.model?.email;
+    
+    if (!userId || !userEmail) {
+      return false;
+    }
+    
+    // Try to authenticate with the current email and provided password
+    try {
+      // Create a new PocketBase instance to avoid affecting the current session
+      const tempPb = new PocketBase("http://127.0.0.1:8090");
+      
+      // Attempt to authenticate with the provided credentials
+      await tempPb.collection('users').authWithPassword(userEmail, password);
+      
+      // If authentication succeeds, the password is correct
+      return true;
+    } catch (authError: any) {
+      // If authentication fails due to invalid credentials, the password is incorrect
+      if (authError.status === 400) {
+        return false;
+      }
+      
+      // For other errors, log them but don't expose to user
+      console.error('Error verifying password:', authError);
+      throw authError;
+    }
+  } catch (error) {
+    console.error('Error in password verification:', error);
     throw error;
   }
 };
@@ -421,7 +548,39 @@ const updatePassword = async () => {
       return;
     }
     
-    // Instead of trying to authenticate, use the password change endpoint directly
+    // Verify current password before attempting update
+    isVerifyingPassword.value = true;
+    try {
+      const isPasswordValid = await verifyCurrentPassword(currentPassword.value);
+      
+      if (!isPasswordValid) {
+        currentPasswordError.value = true;
+        currentPasswordErrorMessage.value = 'Current password is incorrect';
+        isUpdatingPassword.value = false;
+        isVerifyingPassword.value = false;
+        
+        // Add a class to shake the button
+        const button = document.querySelector('.password-button');
+        if (button) {
+          button.classList.add('shake-animation');
+          setTimeout(() => {
+            button.classList.remove('shake-animation');
+          }, 500);
+        }
+        
+        return;
+      }
+    } catch (verifyError) {
+      console.error('Error verifying password:', verifyError);
+      errorMessage.value = 'Failed to verify current password. Please try again.';
+      isUpdatingPassword.value = false;
+      isVerifyingPassword.value = false;
+      return;
+    } finally {
+      isVerifyingPassword.value = false;
+    }
+    
+    // Password is verified, proceed with update
     try {
       // PocketBase expects this format for password changes
       await pb.collection('users').update(userId, {
@@ -438,10 +597,24 @@ const updatePassword = async () => {
       // Set success state
       passwordUpdateSuccess.value = true;
       
-      // Reset success state after 3 seconds
+      // Show a brief success message before logging out
+      successMessage.value = 'Password updated successfully. For security reasons, you will be logged out.';
+      
+      // Force logout after successful password change, with a delay to show success feedback
       setTimeout(() => {
-        passwordUpdateSuccess.value = false;
-      }, 3000);
+        // Clear all auth data
+        pb.authStore.clear();
+        localStorage.removeItem('pocketbase_auth');
+        sessionStorage.removeItem('pocketbase_auth');
+        
+        // Also remove any remembered user data to force complete re-login
+        localStorage.removeItem('remembered_user');
+        
+        // Redirect to login page after a short delay
+        setTimeout(() => {
+          window.location.replace('/login');
+        }, 3000);
+      }, 2000);
     } catch (err: any) {
       console.error('Error in password update request:', err);
       
@@ -830,11 +1003,11 @@ onMounted(() => {
         <div class="mt-4 flex justify-end">
           <button 
             @click="updatePassword"
-            :disabled="isUpdatingPassword"
+            :disabled="isUpdatingPassword || !passwordFieldsHaveValues"
             class="relative px-4 py-2 rounded-md transition-colors overflow-hidden password-button"
             :class="{
-              'bg-[#6A5CFE] text-white hover:bg-[#7C6CFF]': !passwordUpdateSuccess && !isUpdatingPassword,
-              'bg-gray-400 text-white cursor-not-allowed': isUpdatingPassword,
+              'bg-[#6A5CFE] text-white hover:bg-[#7C6CFF]': !passwordUpdateSuccess && !isUpdatingPassword && passwordFieldsHaveValues,
+              'bg-gray-400 text-white cursor-not-allowed': isUpdatingPassword || !passwordFieldsHaveValues,
               'bg-[#6A5CFE] text-white': passwordUpdateSuccess
             }"
           >
@@ -844,7 +1017,7 @@ onMounted(() => {
             <div class="relative z-10 flex items-center gap-2">
               <Check v-if="passwordUpdateSuccess" class="w-4 h-4" />
               <Save v-else class="w-4 h-4" />
-              {{ isUpdatingPassword ? 'Updating...' : (passwordUpdateSuccess ? 'Updated!' : 'Update') }}
+              {{ isUpdatingPassword ? (isVerifyingPassword ? 'Verifying...' : 'Updating...') : (passwordUpdateSuccess ? 'Updated!' : 'Update') }}
             </div>
           </button>
         </div>
