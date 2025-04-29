@@ -100,6 +100,33 @@ const isNewDocument = (doc: Document) => {
   return !doc.viewed && (doc.status === "Pending" || doc.status === "Verified");
 };
 
+// Add this computed property after isNewDocument
+const getDeliveryWarning = (doc: Document) => {
+  if (!doc.deliveryDate || doc.status === 'Completed' || doc.status === 'Lapsed') return null;
+  
+  const now = new Date();
+  const deliveryDate = new Date(doc.deliveryDate);
+  const diffDays = Math.ceil((deliveryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  
+  // If document is due within 24 hours
+  if (diffDays === 0) {
+    return {
+      text: 'Due Today',
+      color: 'bg-red-100 text-red-800'
+    };
+  }
+  
+  // If document is due within 3 days
+  if (diffDays > 0 && diffDays <= 3) {
+    return {
+      text: 'Almost Due',
+      color: 'bg-yellow-100 text-yellow-800'
+    };
+  }
+  
+  return null;
+};
+
 
 
 //delivery time
@@ -1484,8 +1511,11 @@ const downloadSelectedDocuments = () => {
       return `${eventType}\nTime: ${timestamp}\nBy: ${user}${changes}`;
     }).join('\n\n') || "No timeline events";
 
-    // Create text content
+    // Create text content with separators
     const textContent = `
+=============================================
+ORDER INFORMATION
+=============================================
 Order Details: ${doc.orderNumber}
 Tracking ID: ${doc.trackingId}
 Created at: ${doc.dateCreated}
@@ -1493,16 +1523,23 @@ Status: ${doc.status}
 Handled By: ${doc.handledBy}
 Created By: ${doc.createdBy}
 
-Supplier Information:
+=============================================
+SUPPLIER INFORMATION
+=============================================
 Supplier Name: ${doc.supplierName}
 Address: ${doc.address}
 TIN ID: ${doc.tin_ID}
 Mode of Procurement: ${doc.modeofProcurement}
 Delivery Date: ${doc.deliveryDate}
 
-Timeline Events:
+=============================================
+TIMELINE EVENTS
+=============================================
 ${timelineEvents}
 
+=============================================
+VERIFICATION DETAILS
+=============================================
 Verified At: ${doc.verifiedAt ? formatTimestamp(doc.verifiedAt) : "Not verified"}
 Verified By: ${doc.verifiedByName || "Not verified"}
 Completed At: ${doc.completedAt ? formatTimestamp(doc.completedAt) : "Not completed"}
@@ -1522,6 +1559,9 @@ Last Updated: ${doc.updated ? formatTimestamp(doc.updated) : "Not updated"}
   } else {
     // Multiple documents selected - Create a summary text file
     const textContent = selectedDocs.map(doc => `
+=============================================
+ORDER INFORMATION
+=============================================
 Order Number: ${doc.orderNumber}
 Tracking ID: ${doc.trackingId}
 Created at: ${doc.dateCreated}
@@ -1533,7 +1573,7 @@ Delivery Date: ${doc.deliveryDate}
 Verified At: ${doc.verifiedAt ? formatTimestamp(doc.verifiedAt) : "Not verified"}
 Verified By: ${doc.verifiedByName || "Not verified"}
 Completed At: ${doc.completedAt ? formatTimestamp(doc.completedAt) : "Not completed"}
-----------------------------------------
+=============================================
 `).join('\n');
 
     const blob = new Blob([textContent], { type: 'text/plain' });
@@ -2222,7 +2262,7 @@ const getNextVerificationStep = computed(() => {
           <span>
             {{ activeButton.toUpperCase() }}
             <span v-if="activeButton.toUpperCase() !== 'DOCUMENTS'"
-              >DOCUMENT</span
+              >DOCUMENTS</span
             >
           </span>
         </h1>
@@ -2381,6 +2421,13 @@ const getNextVerificationStep = computed(() => {
                       class="ml-2 px-1.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 rounded-full"
                     >
                       New
+                    </span>
+                    <!-- Delivery warning badge -->
+                    <span
+                      v-if="getDeliveryWarning(doc)"
+                      :class="`ml-2 px-1.5 py-0.5 text-xs font-medium rounded-full ${getDeliveryWarning(doc)?.color}`"
+                    >
+                      {{ getDeliveryWarning(doc)?.text }}
                     </span>
                   </a>
                   <div class="text-xs text-gray-500">{{ doc.trackingId }}</div>
