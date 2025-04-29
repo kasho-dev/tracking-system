@@ -23,8 +23,6 @@ import {
   ChevronDown,
 } from "lucide-vue-next";
 
-
-
 // Define the type for documents
 interface FieldChange {
   changed: boolean;
@@ -144,7 +142,7 @@ const formatDeliveryDateTime = (
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
-      timeZone: "Asia/Manila"
+      timeZone: "Asia/Manila",
     });
   } catch (error) {
     console.error("Error formatting date:", error);
@@ -155,9 +153,8 @@ const formatDeliveryDateTime = (
 const dateError = ref(false);
 const minDeliveryDate = computed(() => {
   const now = new Date();
-  // Convert to Philippine time (UTC+8)
-  const phTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-  return phTime.toISOString().slice(0, 16);
+  // We're already in local time (UTC+8), so no need to add 8 hours
+  return now.toISOString().slice(0, 16);
 });
 
 const validateDeliveryDate = () => {
@@ -178,21 +175,22 @@ const shouldMarkAsLapsed = (doc: {
   status: string;
 }): boolean => {
   // Skip if not in lapse-eligible status
-  if (!['Pending', 'Needs Action', 'Extended', 'Verified'].includes(doc.status)) return false;
-  
+  if (!["Pending", "Needs Action", "Extended", "Verified"].includes(doc.status))
+    return false;
+
   // Skip if no valid delivery date
   if (!doc.deliveryDate) return false;
-  
+
   const deliveryDate = new Date(doc.deliveryDate);
   if (isNaN(deliveryDate.getTime())) return false;
 
   // Testing threshold - 5 minutes
-  // const threshold = 2 * 60 * 1000; 
-  const threshold = 5 * 24 * 60 * 60 * 1000; 
+  // const threshold = 2 * 60 * 1000;
+  const threshold = 5 * 24 * 60 * 60 * 1000;
   const now = new Date();
-  
+
   // Only lapse if delivery date was more than threshold ago
-  return (now.getTime() - deliveryDate.getTime()) > threshold;
+  return now.getTime() - deliveryDate.getTime() > threshold;
 };
 
 const showPONumberError = ref(false);
@@ -223,36 +221,24 @@ const formatEditedDateTime = (
   dateString: string | undefined | null,
   isCreatedDate: boolean = false
 ): string => {
-  if (!dateString) return '';
+  if (!dateString) return "";
 
   try {
     const date = new Date(dateString);
     
-    // For delivery dates, add timezone offset for Philippine time (UTC+8)
-    if (!isCreatedDate) {
-      const phDate = new Date(date.getTime() + 8 * 60 * 60 * 1000);
-      return phDate.toLocaleString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true
-      });
-    }
-    
-    // For created dates, use as is
+    // Always display in Philippine time (UTC+8) regardless of date type
     return date.toLocaleString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
       hour: "numeric",
       minute: "2-digit",
-      hour12: true
+      hour12: true,
+      timeZone: "Asia/Manila",
     });
   } catch (error) {
     console.error("Error formatting date:", error);
-    return '';
+    return "";
   }
 };
 
@@ -457,14 +443,15 @@ const isAllowedRole = computed(() => {
 
 const verifyDocument = async () => {
   if (!selectedOrder.value || !currentUser.value) return;
-  await fetchSelectedOrder(); 
+  await fetchSelectedOrder();
 
   const modifierName =
     currentUser.value?.name || currentUser.value?.email || "System";
 
   try {
+    // Get current time in local timezone (UTC+8)
     const verificationTimestamp = new Date().toISOString();
-
+    
     let newStatus = selectedOrder.value.status;
     let verificationType = "";
 
@@ -611,6 +598,7 @@ const undoVerification = async () => {
       undoAction = "Reverted from Needs Action to Pending";
     }
 
+    // Get current time in local timezone (UTC+8)
     const undoTimestamp = new Date().toISOString();
     const userInfo = {
       userId: currentUser.value.id,
@@ -709,22 +697,22 @@ const events = computed(() => {
               address: "Address",
               tin_ID: "TIN ID",
               modeofProcurement: "Mode of Procurement",
-              deliveryDate: "Delivery Date"
+              deliveryDate: "Delivery Date",
             };
 
             // Special handling for delivery date field
-            if (field === 'deliveryDate') {
+            if (field === "deliveryDate") {
               return {
                 field: fieldNames[field] || field,
-                oldValue: details.oldValue || 'empty',
-                newValue: details.newValue || 'empty'
+                oldValue: details.oldValue || "empty",
+                newValue: details.newValue || "empty",
               };
             }
 
             return {
               field: fieldNames[field] || field,
-              oldValue: details.oldValue || 'empty',
-              newValue: details.newValue || 'empty'
+              oldValue: details.oldValue || "empty",
+              newValue: details.newValue || "empty",
             };
           });
 
@@ -735,15 +723,19 @@ const events = computed(() => {
 
         timelineEvents.push({
           title: getVerificationTitle(event.type),
-          description: `Modified by <span class="username">${event.userName || "Unknown"}</span>`,
+          description: `Modified by <span class="username">${
+            event.userName || "Unknown"
+          }</span>`,
           time: formatTimestamp(event.timestamp),
           modifiedFields,
-          eventId
+          eventId,
         });
       } else {
         timelineEvents.push({
           title: getVerificationTitle(event.type),
-          description: `Action by <span class="username">${event.userName || "Unknown"}</span>`,
+          description: `Action by <span class="username">${
+            event.userName || "Unknown"
+          }</span>`,
           time: formatTimestamp(event.timestamp),
         });
       }
@@ -801,21 +793,30 @@ const getVerificationTitle = (type: string): string => {
     lapsed: "Document Lapsed",
     extend: "Document Extended",
     edit: "Document Edited",
-    modify: "Document Modified"
+    modify: "Document Modified",
   };
   return titleMap[type] || "Verification Step";
 };
 
 // Helper function to consistently format timestamps
 const formatTimestamp = (timestamp: string) => {
-  return new Date(timestamp).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  if (!timestamp) return "";
+  
+  try {
+    const date = new Date(timestamp);
+    return date.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      timeZone: "Asia/Manila",
+    });
+  } catch (error) {
+    console.error("Error formatting timestamp:", error);
+    return "";
+  }
 };
 
 // const completeDocument = async () => {
@@ -891,8 +892,10 @@ const sortedDocuments = computed(() => {
     // Handle date fields differently (creation or last update)
     if (field === "dateCreated" || field === "updated") {
       // Fallback to creation date if updated is missing
-      const dateA = field === "dateCreated" ? a.dateCreated : (a.updated ?? a.dateCreated);
-      const dateB = field === "dateCreated" ? b.dateCreated : (b.updated ?? b.dateCreated);
+      const dateA =
+        field === "dateCreated" ? a.dateCreated : a.updated ?? a.dateCreated;
+      const dateB =
+        field === "dateCreated" ? b.dateCreated : b.updated ?? b.dateCreated;
       const timeA = new Date(dateA).getTime();
       const timeB = new Date(dateB).getTime();
       return direction === "asc" ? timeA - timeB : timeB - timeA;
@@ -933,58 +936,63 @@ const isEditMode = ref(false);
 const currentEditingId = ref<string | null>(null);
 
 // Add these new refs to track original values when opening edit modal
-const originalPoNumber = ref('');
-const originalSupplierName = ref('');
-const originalAddress = ref('');
-const originalTinId = ref('');
-const originalProcurementMode = ref('');
-const originalDeliveryDate = ref('');
+const originalPoNumber = ref("");
+const originalSupplierName = ref("");
+const originalAddress = ref("");
+const originalTinId = ref("");
+const originalProcurementMode = ref("");
+const originalDeliveryDate = ref("");
 
 // Add computed property to determine if fields have changed
 const hasChanges = computed(() => {
   if (!isEditMode.value) return true; // For new orders, always enable the button
-  
+
   // Check if any field has changed
-  return poNumber.value !== originalPoNumber.value ||
-         supplierName.value !== originalSupplierName.value ||
-         address.value !== originalAddress.value ||
-         tin_ID.value !== originalTinId.value ||
-         modeofProcurement.value !== originalProcurementMode.value ||
-         deliveryDate.value !== originalDeliveryDate.value;
+  return (
+    poNumber.value !== originalPoNumber.value ||
+    supplierName.value !== originalSupplierName.value ||
+    address.value !== originalAddress.value ||
+    tin_ID.value !== originalTinId.value ||
+    modeofProcurement.value !== originalProcurementMode.value ||
+    deliveryDate.value !== originalDeliveryDate.value
+  );
 });
 
 const openEditModal = (order: Document) => {
   // Prevent editing if document is completed
-  if (order.status === 'Completed') {
-    alert('Cannot edit a completed document.');
+  if (order.status === "Completed") {
+    alert("Cannot edit a completed document.");
     return;
   }
   isEditMode.value = true;
   currentEditingId.value = order.id;
-  
+
   // Set form fields
   poNumber.value = order.orderNumber;
   supplierName.value = order.supplierName;
   address.value = order.address;
   tin_ID.value = order.tin_ID;
   modeofProcurement.value = order.modeofProcurement;
-  
+
   // Format the date for datetime-local input without adding 8 hours
   if (order.deliveryDate) {
     const date = new Date(order.deliveryDate);
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const day = date.getDate();
-    const hours = date.getHours();
-    const minutes = date.getMinutes();
     
-    // Convert to UTC for the input
-    const utcDate = new Date(Date.UTC(year, month, day, hours, minutes));
-    deliveryDate.value = utcDate.toISOString().slice(0, 16);
+    // Convert date to local timezone (browser's timezone)
+    // This ensures we see the correct UTC+8 time in the input
+    const localDate = new Date(date.getTime());
+    const year = localDate.getFullYear();
+    const month = String(localDate.getMonth() + 1).padStart(2, '0');
+    const day = String(localDate.getDate()).padStart(2, '0');
+    const hours = String(localDate.getHours()).padStart(2, '0');
+    const minutes = String(localDate.getMinutes()).padStart(2, '0');
+    
+    // Format in YYYY-MM-DDThh:mm format for datetime-local input
+    deliveryDate.value = `${year}-${month}-${day}T${hours}:${minutes}`;
   } else {
     deliveryDate.value = "";
   }
-  
+
   // Save original values for comparison
   originalPoNumber.value = poNumber.value;
   originalSupplierName.value = supplierName.value;
@@ -992,7 +1000,7 @@ const openEditModal = (order: Document) => {
   originalTinId.value = tin_ID.value;
   originalProcurementMode.value = modeofProcurement.value;
   originalDeliveryDate.value = deliveryDate.value;
-  
+
   showModal.value = true;
   isOverlayMinimized.value = false;
   isModalOpen.value = false;
@@ -1000,9 +1008,8 @@ const openEditModal = (order: Document) => {
 
 const formatDateForInput = (dateString: string) => {
   const date = new Date(dateString);
-  // Convert to Philippine time (UTC+8)
-  const phTime = new Date(date.getTime() + 8 * 60 * 60 * 1000);
-  return phTime.toISOString().slice(0, 16);
+  // No need to add hours, as we're already in local time
+  return date.toISOString().slice(0, 16);
 };
 
 // Add PO Document Modal
@@ -1059,17 +1066,17 @@ const fetchDocuments = async () => {
                   deliveryDate: {
                     changed: true,
                     oldValue: formatDeliveryDateTime(record.deliveryDate),
-                    newValue: "Lapsed" // or you can use an empty string or a message
-                  }
-                }
+                    newValue: "Lapsed", // or you can use an empty string or a message
+                  },
+                },
               };
               await pb.collection("Collection_1").update(record.id, {
                 status: "Lapsed",
                 updated: new Date().toISOString(),
                 verificationEvents: [
                   ...(record.verificationEvents || []),
-                  lapsedEvent
-                ]
+                  lapsedEvent,
+                ],
               });
             } catch (error) {
               console.error("Error updating document status:", error);
@@ -1119,7 +1126,7 @@ const fetchDocuments = async () => {
             timestamp: event.timestamp,
             userId: event.userId,
             userName: event.userName,
-            modifiedFields: event.modifiedFields || {} // Add this line to preserve modifiedFields
+            modifiedFields: event.modifiedFields || {}, // Add this line to preserve modifiedFields
           })),
           viewed: record.viewed || false,
         };
@@ -1127,8 +1134,8 @@ const fetchDocuments = async () => {
     );
 
     // Reset table sorting to show latest modified first
-    sortField.value = 'updated';
-    sortDirection.value = 'desc';
+    sortField.value = "updated";
+    sortDirection.value = "desc";
   } catch (error) {
     console.error("Error fetching documents:", error);
     alert("Failed to load documents. Please try again.");
@@ -1188,9 +1195,13 @@ const submitPO = async () => {
 
   if (!isEditMode.value) {
     try {
-      const existingRecord = await pb.collection("Collection_1").getFirstListItem(`Order_No = "${poNumber.value}"`);
+      const existingRecord = await pb
+        .collection("Collection_1")
+        .getFirstListItem(`Order_No = "${poNumber.value}"`);
       if (existingRecord) {
-        alert(`Order Number "${poNumber.value}" already exists in the database.`);
+        alert(
+          `Order Number "${poNumber.value}" already exists in the database.`
+        );
         return;
       }
     } catch (error: any) {
@@ -1204,9 +1215,9 @@ const submitPO = async () => {
   }
 
   // Convert Philippine time back to UTC before saving to PocketBase
-  const phDate = new Date(deliveryDate.value);
-  const utcDate = new Date(phDate.getTime() - 8 * 60 * 60 * 1000);
-  const formattedDeliveryDate = utcDate.toISOString();
+  // Note: We no longer need to convert from PH to UTC since we want to store UTC+8 
+  // times directly in PocketBase. The input is already in local time (which should be UTC+8)
+  const formattedDeliveryDate = new Date(deliveryDate.value).toISOString();
 
   // Get current user info
   const creatorId = currentUser.value?.id || "system";
@@ -1226,62 +1237,88 @@ const submitPO = async () => {
     deliveryDate: formattedDeliveryDate,
     updated: new Date().toISOString(),
     // Change status to "Extended" if it was "Lapsed"
-    status: isEditMode.value && selectedOrder.value?.status === "Lapsed" ? "Extended" : selectedOrder.value?.status || "Pending",
+    status:
+      isEditMode.value && selectedOrder.value?.status === "Lapsed"
+        ? "Extended"
+        : selectedOrder.value?.status || "Pending",
     // Only set createdBy and createdByName for new documents
-    ...(isEditMode.value ? {} : {
-      createdBy: creatorId,
-      createdByName: creatorName,
-    }),
+    ...(isEditMode.value
+      ? {}
+      : {
+          createdBy: creatorId,
+          createdByName: creatorName,
+        }),
     // Always set lastModifiedBy and handledBy for edits
-    ...(isEditMode.value ? {
-      lastModifiedBy: currentUser.value?.id || "system",
-      lastModifiedByName: currentUser.value?.name || currentUser.value?.email || "System",
-      handledBy: currentUser.value?.name || currentUser.value?.email || "System",
-      verificationEvents: [
-        ...(selectedOrder.value?.verificationEvents || []),
-        {
-          type: isEditMode.value && selectedOrder.value?.status === "Lapsed" ? "extend" : "modify",
-          timestamp: new Date().toISOString(),
-          userId: currentUser.value?.id || "system",
-          userName: currentUser.value?.name || currentUser.value?.email || "System",
-          modifiedFields: {
-            orderNumber: {
-              changed: poNumber.value !== selectedOrder.value?.orderNumber,
-              oldValue: selectedOrder.value?.orderNumber,
-              newValue: poNumber.value
+    ...(isEditMode.value
+      ? {
+          lastModifiedBy: currentUser.value?.id || "system",
+          lastModifiedByName:
+            currentUser.value?.name || currentUser.value?.email || "System",
+          handledBy:
+            currentUser.value?.name || currentUser.value?.email || "System",
+          verificationEvents: [
+            ...(selectedOrder.value?.verificationEvents || []),
+            {
+              type:
+                isEditMode.value && selectedOrder.value?.status === "Lapsed"
+                  ? "extend"
+                  : "modify",
+              timestamp: new Date().toISOString(),
+              userId: currentUser.value?.id || "system",
+              userName:
+                currentUser.value?.name || currentUser.value?.email || "System",
+              modifiedFields: {
+                orderNumber: {
+                  changed: poNumber.value !== selectedOrder.value?.orderNumber,
+                  oldValue: selectedOrder.value?.orderNumber,
+                  newValue: poNumber.value,
+                },
+                supplierName: {
+                  changed:
+                    supplierName.value !== selectedOrder.value?.supplierName,
+                  oldValue: selectedOrder.value?.supplierName,
+                  newValue: supplierName.value,
+                },
+                address: {
+                  changed: address.value !== selectedOrder.value?.address,
+                  oldValue: selectedOrder.value?.address,
+                  newValue: address.value,
+                },
+                tin_ID: {
+                  changed: tin_ID.value !== selectedOrder.value?.tin_ID,
+                  oldValue: selectedOrder.value?.tin_ID,
+                  newValue: tin_ID.value,
+                },
+                modeofProcurement: {
+                  changed:
+                    modeofProcurement.value !==
+                    selectedOrder.value?.modeofProcurement,
+                  oldValue: selectedOrder.value?.modeofProcurement,
+                  newValue: modeofProcurement.value,
+                },
+                deliveryDate: {
+                  changed: !areDatesEqual(
+                    formattedDeliveryDate,
+                    selectedOrder.value?.deliveryDate
+                  ),
+                  oldValue: selectedOrder.value?.deliveryDate
+                    ? formatDeliveryDateTime(
+                        selectedOrder.value.deliveryDate
+                      ) || undefined
+                    : undefined,
+                  newValue: formatDeliveryDateTime(formattedDeliveryDate) || "",
+                },
+              },
+              description:
+                isEditMode.value && selectedOrder.value?.status === "Lapsed"
+                  ? `New Delivery Date: ${formatDeliveryDateTime(
+                      formattedDeliveryDate
+                    )}`
+                  : undefined,
             },
-            supplierName: {
-              changed: supplierName.value !== selectedOrder.value?.supplierName,
-              oldValue: selectedOrder.value?.supplierName,
-              newValue: supplierName.value
-            },
-            address: {
-              changed: address.value !== selectedOrder.value?.address,
-              oldValue: selectedOrder.value?.address,
-              newValue: address.value
-            },
-            tin_ID: {
-              changed: tin_ID.value !== selectedOrder.value?.tin_ID,
-              oldValue: selectedOrder.value?.tin_ID,
-              newValue: tin_ID.value
-            },
-            modeofProcurement: {
-              changed: modeofProcurement.value !== selectedOrder.value?.modeofProcurement,
-              oldValue: selectedOrder.value?.modeofProcurement,
-              newValue: modeofProcurement.value
-            },
-            deliveryDate: {
-              changed: !areDatesEqual(formattedDeliveryDate, selectedOrder.value?.deliveryDate),
-              oldValue: selectedOrder.value?.deliveryDate ? 
-                formatDeliveryDateTime(selectedOrder.value.deliveryDate) || undefined : 
-                undefined,
-              newValue: formatDeliveryDateTime(formattedDeliveryDate) || ''
-            }
-          },
-          description: isEditMode.value && selectedOrder.value?.status === "Lapsed" ? `New Delivery Date: ${formatDeliveryDateTime(formattedDeliveryDate)}` : undefined
+          ],
         }
-      ]
-    } : {})
+      : {}),
   };
 
   try {
@@ -1363,13 +1400,13 @@ const isModalOpen = ref(false);
 const openModal = async (order: Document) => {
   isOverlayOpen.value = true;
   markAsClicked(order.id);
-  
+
   // Format delivery date using the new function
   let formattedDeliveryDate = formatEditedDateTime(order.deliveryDate);
-  
+
   // Format created date using the new function with isCreatedDate flag
   const formattedCreatedDate = formatEditedDateTime(order.dateCreated, true);
-  
+
   selectedOrder.value = {
     id: order.id,
     orderNumber: order.orderNumber,
@@ -1480,36 +1517,41 @@ const downloadSelectedDocuments = () => {
     // Single document selected
     const doc = selectedDocs[0];
     const fileName = `${doc.orderNumber}.txt`;
-    
-    // Format timeline events
-    const timelineEvents = doc.verificationEvents?.map(event => {
-      const eventType = getVerificationTitle(event.type);
-      const timestamp = formatTimestamp(event.timestamp);
-      const user = event.userName || "Unknown";
-      
-      let changes = "";
-      if (event.modifiedFields) {
-        const fieldChanges = Object.entries(event.modifiedFields)
-          .filter(([_, details]) => details.changed)
-          .map(([field, details]) => {
-            const fieldNames: Record<string, string> = {
-              orderNumber: "Work Order #",
-              supplierName: "Supplier Name",
-              address: "Address",
-              tin_ID: "TIN ID",
-              modeofProcurement: "Mode of Procurement",
-              deliveryDate: "Delivery Date"
-            };
-            return `${fieldNames[field] || field}: ${details.oldValue || 'empty'} → ${details.newValue || 'empty'}`;
-          })
-          .join('\n');
-        if (fieldChanges) {
-          changes = `\nChanges:\n${fieldChanges}`;
-        }
-      }
 
-      return `${eventType}\nTime: ${timestamp}\nBy: ${user}${changes}`;
-    }).join('\n\n') || "No timeline events";
+    // Format timeline events
+    const timelineEvents =
+      doc.verificationEvents
+        ?.map((event) => {
+          const eventType = getVerificationTitle(event.type);
+          const timestamp = formatTimestamp(event.timestamp);
+          const user = event.userName || "Unknown";
+
+          let changes = "";
+          if (event.modifiedFields) {
+            const fieldChanges = Object.entries(event.modifiedFields)
+              .filter(([_, details]) => details.changed)
+              .map(([field, details]) => {
+                const fieldNames: Record<string, string> = {
+                  orderNumber: "Work Order #",
+                  supplierName: "Supplier Name",
+                  address: "Address",
+                  tin_ID: "TIN ID",
+                  modeofProcurement: "Mode of Procurement",
+                  deliveryDate: "Delivery Date",
+                };
+                return `${fieldNames[field] || field}: ${
+                  details.oldValue || "empty"
+                } → ${details.newValue || "empty"}`;
+              })
+              .join("\n");
+            if (fieldChanges) {
+              changes = `\nChanges:\n${fieldChanges}`;
+            }
+          }
+
+          return `${eventType}\nTime: ${timestamp}\nBy: ${user}${changes}`;
+        })
+        .join("\n\n") || "No timeline events";
 
     // Create text content with separators
     const textContent = `
@@ -1542,14 +1584,16 @@ VERIFICATION DETAILS
 =============================================
 Verified At: ${doc.verifiedAt ? formatTimestamp(doc.verifiedAt) : "Not verified"}
 Verified By: ${doc.verifiedByName || "Not verified"}
-Completed At: ${doc.completedAt ? formatTimestamp(doc.completedAt) : "Not completed"}
+Completed At: ${
+      doc.completedAt ? formatTimestamp(doc.completedAt) : "Not completed"
+    }
 Last Updated: ${doc.updated ? formatTimestamp(doc.updated) : "Not updated"}
 `;
 
     // Create and download the file
-    const blob = new Blob([textContent], { type: 'text/plain' });
+    const blob = new Blob([textContent], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = fileName;
     document.body.appendChild(a);
@@ -1570,15 +1614,17 @@ Handled By: ${doc.handledBy}
 Created By: ${doc.createdBy}
 Supplier Name: ${doc.supplierName}
 Delivery Date: ${doc.deliveryDate}
-Verified At: ${doc.verifiedAt ? formatTimestamp(doc.verifiedAt) : "Not verified"}
+Verified At: ${
+          doc.verifiedAt ? formatTimestamp(doc.verifiedAt) : "Not verified"
+        }
 Verified By: ${doc.verifiedByName || "Not verified"}
 Completed At: ${doc.completedAt ? formatTimestamp(doc.completedAt) : "Not completed"}
 =============================================
 `).join('\n');
 
-    const blob = new Blob([textContent], { type: 'text/plain' });
+    const blob = new Blob([textContent], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = "Multiple Orders.txt";
     document.body.appendChild(a);
@@ -1661,42 +1707,81 @@ const filteredDocuments = computed(() => {
     const query = searchStore.searchQuery.toLowerCase();
     filtered = filtered.filter((doc) => {
       return Object.entries(doc).some(([key, field]) => {
-        if (typeof field === 'string') {
+        if (typeof field === "string") {
           // Try to match raw string
           if (field.toLowerCase().includes(query)) return true;
           // If it's a date field, also try to match formatted date in multiple formats
-          if (key.toLowerCase().includes('date')) {
+          if (key.toLowerCase().includes("date")) {
             const date = new Date(field);
             if (!isNaN(date.getTime())) {
               // Common formats
               const formats = [
-                date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
-                date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-                date.toLocaleDateString('en-US'),
-                date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', weekday: 'long' }),
-                date.toLocaleString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }),
-                date.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }),
-                date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' }),
-                date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' }),
+                date.toLocaleDateString("en-US", {
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                }),
+                date.toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                }),
+                date.toLocaleDateString("en-US"),
+                date.toLocaleDateString("en-US", {
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                  weekday: "long",
+                }),
+                date.toLocaleString("en-US", {
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                  hour12: true,
+                }),
+                date.toLocaleString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                  hour12: true,
+                }),
+                date.toLocaleDateString("en-US", {
+                  month: "numeric",
+                  day: "numeric",
+                  year: "2-digit",
+                }),
+                date.toLocaleDateString("en-US", {
+                  month: "numeric",
+                  day: "numeric",
+                  year: "numeric",
+                }),
               ];
-              if (formats.some(f => f.toLowerCase().includes(query))) return true;
+              if (formats.some((f) => f.toLowerCase().includes(query)))
+                return true;
             }
           }
         }
         // Explicitly check supplier info fields
-        if ([
-          'supplierName',
-          'address',
-          'tin_ID',
-          'modeofProcurement',
-          'orderNumber',
-          'trackingId',
-          'handledBy',
-          'createdBy',
-          'createdByName',
-          'status',
-          'fileType',
-        ].includes(key) && typeof field === 'string') {
+        if (
+          [
+            "supplierName",
+            "address",
+            "tin_ID",
+            "modeofProcurement",
+            "orderNumber",
+            "trackingId",
+            "handledBy",
+            "createdBy",
+            "createdByName",
+            "status",
+            "fileType",
+          ].includes(key) &&
+          typeof field === "string"
+        ) {
           if (field.toLowerCase().includes(query)) return true;
         }
         return false;
@@ -1802,34 +1887,32 @@ onMounted(async () => {
   await fetchDocuments();
   fetchCurrentUser();
   startPolling();
-
 });
-
-
-
-
-
-
 
 // onUnmounted(() => {
 //   stopPolling();
 // });
 
 // Add a standardized date comparison function
-const areDatesEqual = (date1: string | undefined | null, date2: string | undefined | null): boolean => {
+const areDatesEqual = (
+  date1: string | undefined | null,
+  date2: string | undefined | null
+): boolean => {
   if (!date1 || !date2) return date1 === date2;
-  
+
   try {
-    // Parse both dates and set time components to zeros to compare only date portions
+    // Parse both dates - dates are stored in the same timezone format in PocketBase
     const d1 = new Date(date1);
     const d2 = new Date(date2);
-    
+
     // Compare year, month, day, hours and minutes only
-    return d1.getFullYear() === d2.getFullYear() &&
-           d1.getMonth() === d2.getMonth() &&
-           d1.getDate() === d2.getDate() &&
-           d1.getHours() === d2.getHours() &&
-           d1.getMinutes() === d2.getMinutes();
+    return (
+      d1.getFullYear() === d2.getFullYear() &&
+      d1.getMonth() === d2.getMonth() &&
+      d1.getDate() === d2.getDate() &&
+      d1.getHours() === d2.getHours() &&
+      d1.getMinutes() === d2.getMinutes()
+    );
   } catch (error) {
     console.error("Error comparing dates:", error);
     return false;
@@ -1838,7 +1921,8 @@ const areDatesEqual = (date1: string | undefined | null, date2: string | undefin
 
 // Helper: Get last verification step for Extended docs
 const getNextVerificationStep = computed(() => {
-  if (!selectedOrder.value || selectedOrder.value.status !== 'Extended') return null;
+  if (!selectedOrder.value || selectedOrder.value.status !== "Extended")
+    return null;
   const events = selectedOrder.value.verificationEvents || [];
   // Only consider main flow steps
   const mainSteps = ['initial', 'sent to supplier', 'final', 'completed', 'document created'];
@@ -1883,12 +1967,11 @@ const getNextVerificationStep = computed(() => {
       <div class="sidebar w-64 bg-[#0A0E1A] text-white mr-4 rounded-lg">
         <button
           @click="openModalAdd"
-          class="w-full flex items-center justify-center gap-2 bg-[#6A5CFE] text-white text-sm font-semibold py-3 rounded-xl 
-          hover:bg-[#7C6CFF] hover:shadow-lg hover:shadow-[#6A5CFE]/30 active:bg-[#5A4BD9] active:scale-[0.98] 
-          transition-all duration-300 ease-out relative overflow-hidden group"
+          class="w-full flex items-center justify-center gap-2 bg-[#6A5CFE] text-white text-sm font-semibold py-3 rounded-xl hover:bg-[#7C6CFF] hover:shadow-lg hover:shadow-[#6A5CFE]/30 active:bg-[#5A4BD9] active:scale-[0.98] transition-all duration-300 ease-out relative overflow-hidden group"
         >
-          <span class="absolute inset-0 bg-gradient-to-r from-[#7C6CFF]/0 via-[#7C6CFF]/10 to-[#7C6CFF]/0 
-          group-hover:translate-x-full transition-transform duration-1000 ease-in-out"></span>
+          <span
+            class="absolute inset-0 bg-gradient-to-r from-[#7C6CFF]/0 via-[#7C6CFF]/10 to-[#7C6CFF]/0 group-hover:translate-x-full transition-transform duration-1000 ease-in-out"
+          ></span>
           <svg
             xmlns="http://www.w3.org/2000/svg"
             width="20"
@@ -1906,7 +1989,10 @@ const getNextVerificationStep = computed(() => {
               d="m16 6-8.414 8.586a2 2 0 0 0 0 2.828 2 2 0 0 0 2.828 0l8.414-8.586a4 4 0 0 0 0-5.656 4 4 0 0 0-5.656 0l-8.415 8.585a6 6 0 1 0 8.486 8.486"
             />
           </svg>
-          <span class="relative z-10 group-hover:translate-x-0.5 transition-transform duration-300">Add Purchasing Order</span>
+          <span
+            class="relative z-10 group-hover:translate-x-0.5 transition-transform duration-300"
+            >Add Purchasing Order</span
+          >
         </button>
 
         <!-- Modal Transition -->
@@ -1958,7 +2044,10 @@ const getNextVerificationStep = computed(() => {
                       class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       :class="{ 'border-red-500': showPONumberError }"
                     />
-                    <p v-if="showPONumberError" class="text-red-500 text-xs mt-1">
+                    <p
+                      v-if="showPONumberError"
+                      class="text-red-500 text-xs mt-1"
+                    >
                       PO Number is required (max 50 characters)
                     </p>
                     <p class="text-gray-500 text-xs mt-1">
@@ -1978,7 +2067,10 @@ const getNextVerificationStep = computed(() => {
                       class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       :class="{ 'border-red-500': showSupplierError }"
                     />
-                    <p v-if="showSupplierError" class="text-red-500 text-xs mt-1">
+                    <p
+                      v-if="showSupplierError"
+                      class="text-red-500 text-xs mt-1"
+                    >
                       Supplier Name is required
                     </p>
                   </div>
@@ -1995,7 +2087,10 @@ const getNextVerificationStep = computed(() => {
                       class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       :class="{ 'border-red-500': showSupplierError }"
                     />
-                    <p v-if="showSupplierError" class="text-red-500 text-xs mt-1">
+                    <p
+                      v-if="showSupplierError"
+                      class="text-red-500 text-xs mt-1"
+                    >
                       Address is required
                     </p>
                   </div>
@@ -2012,7 +2107,10 @@ const getNextVerificationStep = computed(() => {
                       class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       :class="{ 'border-red-500': showSupplierError }"
                     />
-                    <p v-if="showSupplierError" class="text-red-500 text-xs mt-1">
+                    <p
+                      v-if="showSupplierError"
+                      class="text-red-500 text-xs mt-1"
+                    >
                       TIN ID is required
                     </p>
                   </div>
@@ -2031,37 +2129,43 @@ const getNextVerificationStep = computed(() => {
                       class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       :class="{ 'border-red-500': showSupplierError }"
                     />
-                    <p v-if="showSupplierError" class="text-red-500 text-xs mt-1">
+                    <p
+                      v-if="showSupplierError"
+                      class="text-red-500 text-xs mt-1"
+                    >
                       Mode of Procurement is required
                     </p>
                   </div>
 
-                <!-- Delivery Date -->
-                <div>
-                  <label class="block text-gray-400 text-sm mb-1">
-                    Delivery Date (Lapse after 5 days)<span class="text-red-500">*</span>
-                  </label>
-                  <input
-                    v-model="deliveryDate"
-                    type="datetime-local"
-                    :min="minDeliveryDate"
-                    class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert"
-                    :class="{
-                      'border-red-500': showDeliveryDateError || dateError,
-                    }"
-                    @change="validateDeliveryDate"
-                  />
-                  <p
-                    v-if="showDeliveryDateError"
-                    class="text-red-500 text-xs mt-1"
-                  >
-                    Delivery date is required
-                  </p>
-                  <p v-if="dateError" class="text-red-500 text-xs mt-1">
-                    Delivery date must be in the future
-                  </p>
+                  <!-- Delivery Date -->
+                  <div>
+                    <label class="block text-gray-400 text-sm mb-1">
+                      Delivery Date (Lapse after 5 days)<span
+                        class="text-red-500"
+                        >*</span
+                      >
+                    </label>
+                    <input
+                      v-model="deliveryDate"
+                      type="datetime-local"
+                      :min="minDeliveryDate"
+                      class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert"
+                      :class="{
+                        'border-red-500': showDeliveryDateError || dateError,
+                      }"
+                      @change="validateDeliveryDate"
+                    />
+                    <p
+                      v-if="showDeliveryDateError"
+                      class="text-red-500 text-xs mt-1"
+                    >
+                      Delivery date is required
+                    </p>
+                    <p v-if="dateError" class="text-red-500 text-xs mt-1">
+                      Delivery date must be in the future
+                    </p>
+                  </div>
                 </div>
-              </div>
 
                 <div class="flex justify-end gap-2 mt-6">
                   <button
@@ -2075,8 +2179,10 @@ const getNextVerificationStep = computed(() => {
                     :disabled="isEditMode && !hasChanges"
                     class="px-4 py-2 rounded-md transition-colors"
                     :class="{
-                      'bg-[#6A5CFE] text-white hover:bg-[#7C6CFF] hover:scale-[1.02] transition-colors': !isEditMode || hasChanges,
-                      'bg-gray-400 text-gray-200 cursor-not-allowed': isEditMode && !hasChanges
+                      'bg-[#6A5CFE] text-white hover:bg-[#7C6CFF] hover:scale-[1.02] transition-colors':
+                        !isEditMode || hasChanges,
+                      'bg-gray-400 text-gray-200 cursor-not-allowed':
+                        isEditMode && !hasChanges,
                     }"
                   >
                     {{ isEditMode ? "Update Order" : "Create Order" }}
@@ -2109,7 +2215,10 @@ const getNextVerificationStep = computed(() => {
                 <File class="transition-colors duration-300" />
                 <span class="sidebar-button-text">All</span>
               </span>
-              <span class="text-white bg-blue-500/20 px-2 py-0.5 rounded-full text-xs">{{ documents.length }}</span>
+              <span
+                class="text-white bg-blue-500/20 px-2 py-0.5 rounded-full text-xs"
+                >{{ documents.length }}</span
+              >
             </div>
           </transition>
 
@@ -2130,10 +2239,13 @@ const getNextVerificationStep = computed(() => {
               "
             >
               <span class="flex items-center gap-2">
-                <Check class="transition-colors duration-300" /> 
+                <Check class="transition-colors duration-300" />
                 <span>Completed</span>
               </span>
-              <span class="text-white bg-green-500/20 px-2 py-0.5 rounded-full text-xs">{{ statusCounts.Completed || 0 }}</span>
+              <span
+                class="text-white bg-green-500/20 px-2 py-0.5 rounded-full text-xs"
+                >{{ statusCounts.Completed || 0 }}</span
+              >
             </div>
           </transition>
 
@@ -2154,10 +2266,13 @@ const getNextVerificationStep = computed(() => {
               "
             >
               <span class="flex items-center gap-2">
-                <Clock class="transition-colors duration-300" /> 
+                <Clock class="transition-colors duration-300" />
                 <span>Pending</span>
               </span>
-              <span class="text-white bg-purple-500/20 px-2 py-0.5 rounded-full text-xs">{{ statusCounts.Pending || 0 }}</span>
+              <span
+                class="text-white bg-purple-500/20 px-2 py-0.5 rounded-full text-xs"
+                >{{ statusCounts.Pending || 0 }}</span
+              >
             </div>
           </transition>
 
@@ -2178,12 +2293,13 @@ const getNextVerificationStep = computed(() => {
               "
             >
               <span class="flex items-center gap-2">
-                <User class="transition-colors duration-300" /> 
+                <User class="transition-colors duration-300" />
                 <span>Needs Action</span>
               </span>
-              <span class="text-white bg-yellow-500/20 px-2 py-0.5 rounded-full text-xs">{{
-                statusCounts["Needs Action"] || 0
-              }}</span>
+              <span
+                class="text-white bg-yellow-500/20 px-2 py-0.5 rounded-full text-xs"
+                >{{ statusCounts["Needs Action"] || 0 }}</span
+              >
             </div>
           </transition>
 
@@ -2204,10 +2320,13 @@ const getNextVerificationStep = computed(() => {
               "
             >
               <span class="flex items-center gap-2">
-                <TriangleAlert class="transition-colors duration-300" /> 
+                <TriangleAlert class="transition-colors duration-300" />
                 <span>Lapsed</span>
               </span>
-              <span class="text-white bg-red-500/20 px-2 py-0.5 rounded-full text-xs">{{ statusCounts.Lapsed || 0 }}</span>
+              <span
+                class="text-white bg-red-500/20 px-2 py-0.5 rounded-full text-xs"
+                >{{ statusCounts.Lapsed || 0 }}</span
+              >
             </div>
           </transition>
 
@@ -2228,7 +2347,18 @@ const getNextVerificationStep = computed(() => {
               "
             >
               <span class="flex items-center gap-2 group">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="transition-colors duration-300">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="transition-colors duration-300"
+                >
                   <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
                   <line x1="16" y1="2" x2="16" y2="6"></line>
                   <line x1="8" y1="2" x2="8" y2="6"></line>
@@ -2242,7 +2372,10 @@ const getNextVerificationStep = computed(() => {
                 </svg>
                 <span>Extended</span>
               </span>
-              <span class="text-white bg-orange-500/20 px-2 py-0.5 rounded-full text-xs">{{ statusCounts.Extended || 0 }}</span>
+              <span
+                class="text-white bg-orange-500/20 px-2 py-0.5 rounded-full text-xs"
+                >{{ statusCounts.Extended || 0 }}</span
+              >
             </div>
           </transition>
         </div>
@@ -2444,7 +2577,7 @@ const getNextVerificationStep = computed(() => {
 
                 <!-- Date Created Cell -->
                 <td class="p-3 text-left min-w-[150px]">
-                  {{ new Date(doc.dateCreated).toLocaleString() }}
+                  {{ formatTimestamp(doc.dateCreated) }}
                 </td>
               </tr>
             </tbody>
@@ -2587,43 +2720,66 @@ const getNextVerificationStep = computed(() => {
                   <template #content="slotProps">
                     <div class="timeline-item">
                       <strong>{{ slotProps.item.title }}</strong>
-                      <div class="event-description" v-html="slotProps.item.description"></div>
+                      <div
+                        class="event-description"
+                        v-html="slotProps.item.description"
+                      ></div>
                       <div v-if="slotProps.item.modifiedFields" class="mt-2">
-                        <button 
+                        <button
                           @click="toggleFieldChanges(slotProps.item.eventId!)"
                           class="text-sm text-purple-400 hover:text-purple-300 flex items-center gap-1"
                         >
-                          <span>{{ expandedStates[slotProps.item.eventId!] ? 'Hide Changes' : 'Show Changes' }}</span>
-                          <svg 
-                            xmlns="http://www.w3.org/2000/svg" 
-                            width="16" 
-                            height="16" 
-                            viewBox="0 0 24 24" 
-                            fill="none" 
-                            stroke="currentColor" 
-                            stroke-width="2" 
-                            stroke-linecap="round" 
+                          <span>{{
+                            expandedStates[slotProps.item.eventId!]
+                              ? "Hide Changes"
+                              : "Show Changes"
+                          }}</span>
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
                             stroke-linejoin="round"
                             :class="{ 'transform rotate-180': expandedStates[slotProps.item.eventId!] }"
                           >
-                            <path d="m6 9 6 6 6-6"/>
+                            <path d="m6 9 6 6 6-6" />
                           </svg>
                         </button>
-                        <div v-if="expandedStates[slotProps.item.eventId!]" class="mt-2 space-y-2">
-                          <div v-for="(field, index) in slotProps.item.modifiedFields" :key="index" class="p-2 bg-gray-800 rounded">
-                            <div class="text-sm font-medium">{{ field.field }}</div>
+                        <div
+                          v-if="expandedStates[slotProps.item.eventId!]"
+                          class="mt-2 space-y-2"
+                        >
+                          <div
+                            v-for="(field, index) in slotProps.item
+                              .modifiedFields"
+                            :key="index"
+                            class="p-2 bg-gray-800 rounded"
+                          >
+                            <div class="text-sm font-medium">
+                              {{ field.field }}
+                            </div>
                             <div class="flex items-center gap-2 mt-1">
                               <span class="text-red-400 text-sm">From:</span>
-                              <span class="text-red-300">{{ field.oldValue }}</span>
+                              <span class="text-red-300">{{
+                                field.oldValue
+                              }}</span>
                             </div>
                             <div class="flex items-center gap-2">
                               <span class="text-green-400 text-sm">To:</span>
-                              <span class="text-green-300">{{ field.newValue }}</span>
+                              <span class="text-green-300">{{
+                                field.newValue
+                              }}</span>
                             </div>
                           </div>
                         </div>
                       </div>
-                      <small class="text-gray-500">{{ slotProps.item.time }}</small>
+                      <small class="text-gray-500">{{
+                        slotProps.item.time
+                      }}</small>
                     </div>
                   </template>
                 </Timeline>
@@ -2633,7 +2789,10 @@ const getNextVerificationStep = computed(() => {
               <div class="mt-4 flex flex-wrap gap-2">
                 <template v-if="isAdmin">
                   <!-- For Pending or Extended, but Extended uses step logic -->
-                  <div v-if="selectedOrder?.status === 'Pending'" class="flex gap-2">
+                  <div
+                    v-if="selectedOrder?.status === 'Pending'"
+                    class="flex gap-2"
+                  >
                     <button
                       @click="verifyDocument"
                       class="px-4 py-2 bg-blue-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/50 active:scale-95 active:shadow-blue-500/75 active:bg-blue-700"
@@ -2642,7 +2801,13 @@ const getNextVerificationStep = computed(() => {
                     </button>
                   </div>
                   <!-- Extended: show correct step -->
-                  <div v-if="selectedOrder?.status === 'Extended' && getNextVerificationStep === 'initial'" class="flex gap-2">
+                  <div
+                    v-if="
+                      selectedOrder?.status === 'Extended' &&
+                      getNextVerificationStep === 'initial'
+                    "
+                    class="flex gap-2"
+                  >
                     <button
                       @click="verifyDocument"
                       class="px-4 py-2 bg-blue-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-500/50 active:scale-95 active:shadow-blue-500/75 active:bg-blue-700"
@@ -2650,7 +2815,13 @@ const getNextVerificationStep = computed(() => {
                       Initial Verify
                     </button>
                   </div>
-                  <div v-if="selectedOrder?.status === 'Extended' && getNextVerificationStep === 'sent to supplier'" class="flex gap-2">
+                  <div
+                    v-if="
+                      selectedOrder?.status === 'Extended' &&
+                      getNextVerificationStep === 'sent to supplier'
+                    "
+                    class="flex gap-2"
+                  >
                     <button
                       @click="verifyDocument"
                       class="px-4 py-2 bg-purple-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-purple-600 hover:shadow-lg hover:shadow-purple-500/50 active:scale-95 active:shadow-purple-500/75 active:bg-purple-700"
@@ -2658,7 +2829,13 @@ const getNextVerificationStep = computed(() => {
                       Mark as Sent to Supplier
                     </button>
                   </div>
-                  <div v-if="selectedOrder?.status === 'Extended' && getNextVerificationStep === 'final'" class="flex gap-2">
+                  <div
+                    v-if="
+                      selectedOrder?.status === 'Extended' &&
+                      getNextVerificationStep === 'final'
+                    "
+                    class="flex gap-2"
+                  >
                     <button
                       @click="verifyDocument"
                       class="px-4 py-2 bg-green-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-green-600 hover:shadow-lg hover:shadow-green-500/50 active:scale-95 active:shadow-green-500/75 active:bg-green-700"
@@ -2667,7 +2844,10 @@ const getNextVerificationStep = computed(() => {
                     </button>
                   </div>
                   <!-- Needs Action -->
-                  <div v-if="selectedOrder?.status === 'Needs Action'" class="flex gap-2">
+                  <div
+                    v-if="selectedOrder?.status === 'Needs Action'"
+                    class="flex gap-2"
+                  >
                     <button
                       @click="verifyDocument"
                       class="px-4 py-2 bg-purple-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-purple-600 hover:shadow-lg hover:shadow-purple-500/50 active:scale-95 active:shadow-purple-500/75 active:bg-purple-700"
@@ -2682,7 +2862,10 @@ const getNextVerificationStep = computed(() => {
                     </button>
                   </div>
                   <!-- Verified -->
-                  <div v-if="selectedOrder?.status === 'Verified'" class="flex gap-2">
+                  <div
+                    v-if="selectedOrder?.status === 'Verified'"
+                    class="flex gap-2"
+                  >
                     <button
                       @click="verifyDocument"
                       class="px-4 py-2 bg-green-500 text-white font-medium rounded-lg transition-all duration-200 hover:bg-green-600 hover:shadow-lg hover:shadow-green-500/50 active:scale-95 active:shadow-green-500/75 active:bg-green-700"
@@ -2725,9 +2908,9 @@ const getNextVerificationStep = computed(() => {
               </svg>
             </div>
           </div>
-        </Transition>
+        </transition>
       </div>
-    </Transition>
+    </transition>
 
     <!-- End of Overlay -->
 
@@ -2794,8 +2977,8 @@ const getNextVerificationStep = computed(() => {
 .timeline-item {
   text-align: left;
   margin-left: 0;
-  white-space: pre-line;  /* Add this line to respect line breaks */
-  margin-bottom: 1.5rem;  /* Add space after each timeline item */
+  white-space: pre-line; /* Add this line to respect line breaks */
+  margin-bottom: 1.5rem; /* Add space after each timeline item */
 }
 
 .timeline-title {
@@ -2958,7 +3141,7 @@ tbody tr:hover {
 }
 
 .sidebar-buttons > div::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: 0;
@@ -3098,35 +3281,35 @@ tbody tr:hover {
   margin-left: 0;
   white-space: pre-line;
   margin-bottom: 1.5rem;
-  background-color: #1A1F36;
+  background-color: #1a1f36;
   padding: 1rem;
   border-radius: 0.5rem;
 }
 
 .timeline-item strong {
-  color: #E5E7EB;
+  color: #e5e7eb;
   display: block;
   margin-bottom: 0.5rem;
 }
 
 .timeline-item .event-description {
-  color: #9CA3AF;
+  color: #9ca3af;
 }
 
 .timeline-item .event-description :deep(strong) {
-  color: #6A5CFE;
+  color: #6a5cfe;
   font-weight: 600;
 }
 
 .timeline-item .event-description :deep(span.username) {
-  color: #60A5FA;
+  color: #60a5fa;
   font-weight: 500;
 }
 
 .timeline-item small {
   display: block;
   margin-top: 0.5rem;
-  color: #9CA3AF;
+  color: #9ca3af;
 }
 
 /* Add transition for the dropdown */
