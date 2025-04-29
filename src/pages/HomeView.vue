@@ -446,8 +446,20 @@ const verifyDocument = async () => {
       userName: currentUser.value.name || currentUser.value.email || "System",
     };
 
-    // ADMIN HANDLES ALL VERIFICATION STEPS
-    if (selectedOrder.value.status === "Pending" || selectedOrder.value.status === "Extended") {
+    // Handle Extended documents based on next verification step
+    if (selectedOrder.value.status === "Extended") {
+      const nextStep = getNextVerificationStep.value;
+      if (nextStep === 'initial') {
+        newStatus = "Needs Action";
+        verificationType = "initial";
+      } else if (nextStep === 'sent to supplier') {
+        newStatus = "Verified";
+        verificationType = "sent to supplier";
+      } else if (nextStep === 'final') {
+        newStatus = "Completed";
+        verificationType = "final";
+      }
+    } else if (selectedOrder.value.status === "Pending") {
       // INITIAL VERIFICATION
       newStatus = "Needs Action";
       verificationType = "initial";
@@ -459,7 +471,10 @@ const verifyDocument = async () => {
       // FINAL VERIFICATION - DOCUMENT COMPLETION
       newStatus = "Completed";
       verificationType = "final";
+    }
 
+    // For completion updates
+    if (newStatus === "Completed") {
       const completionTimestamp = new Date().toISOString();
 
       const updateData = {
@@ -473,7 +488,7 @@ const verifyDocument = async () => {
           },
         ],
         completedAt: verificationTimestamp,
-        handledBy: modifierName, // Add this line
+        handledBy: modifierName,
         lastModifiedBy: currentUser.value.id,
         lastModifiedByName: modifierName,
         updated: new Date().toISOString(),
@@ -517,9 +532,9 @@ const verifyDocument = async () => {
       verifiedBy: userInfo.userId,
       verifiedByName: userInfo.userName,
       updated: verificationTimestamp,
-      handledBy: modifierName, // Add this line
-      lastModifiedBy: currentUser.value.id, // Add this line
-      lastModifiedByName: modifierName, // Add this line
+      handledBy: modifierName,
+      lastModifiedBy: currentUser.value.id,
+      lastModifiedByName: modifierName,
     };
 
     await pb
@@ -1787,29 +1802,32 @@ const getNextVerificationStep = computed(() => {
   const events = selectedOrder.value.verificationEvents || [];
   // Only consider main flow steps
   const mainSteps = ['initial', 'sent to supplier', 'final', 'completed', 'document created'];
-  let undoneSteps: string[] = [];
-  let foundMainStep = false;
-  // Go backwards through the timeline
+  let lastMainStep = '';
+  
+  // Go backwards through the timeline to find the last main step
   for (let i = events.length - 1; i >= 0; i--) {
     const type = events[i].type;
-    const action = (events[i] as any).action;
-    if (type === 'undo' && action) {
-      if (action.includes('Verified to Needs Action')) {
-        undoneSteps.push('sent to supplier');
-      } else if (action.includes('Needs Action to Pending')) {
-        undoneSteps.push('initial');
-      }
-    } else if (mainSteps.includes(type) && !undoneSteps.includes(type)) {
-      foundMainStep = true;
-      if (type === 'document created') return 'initial';
-      if (type === 'initial') return 'sent to supplier';
-      if (type === 'sent to supplier') return 'final';
-      if (type === 'final' || type === 'completed') return null;
+    if (mainSteps.includes(type)) {
+      lastMainStep = type;
+      break;
     }
   }
-  // If no main step found and doc is Extended, default to 'initial'
-  if (!foundMainStep) return 'initial';
-  return 'initial';
+
+  // Determine next step based on last main step
+  switch (lastMainStep) {
+    case '':
+    case 'document created':
+      return 'initial';
+    case 'initial':
+      return 'sent to supplier';
+    case 'sent to supplier':
+      return 'final';
+    case 'final':
+    case 'completed':
+      return null;
+    default:
+      return 'initial';
+  }
 });
 </script>
 
