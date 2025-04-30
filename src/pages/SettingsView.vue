@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick } from 'vue';
+import { ref, onMounted, computed, nextTick, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import PocketBase from 'pocketbase';
 
@@ -28,6 +28,13 @@ const originalName = ref('');
 const originalEmail = ref('');
 const originalDepartment = ref('');
 const originalProfileImageUrl = ref('');
+
+// Make email field case insensitive by forcing lowercase on input
+watch(email, (newValue) => {
+  if (newValue && newValue !== newValue.toLowerCase()) {
+    email.value = newValue.toLowerCase();
+  }
+});
 
 // Available departments
 const departments = [
@@ -112,13 +119,13 @@ const fetchUserData = async () => {
       
       // Set current values
       name.value = userData.name || '';
-      email.value = userData.email || '';
+      email.value = userData.email ? userData.email.toLowerCase() : '';
       department.value = userData.department || '';
       role.value = userData.role || 'user';
       
       // Store original values
       originalName.value = userData.name || '';
-      originalEmail.value = userData.email || '';
+      originalEmail.value = userData.email ? userData.email.toLowerCase() : '';
       originalDepartment.value = userData.department || '';
       
       // Get avatar URL if it exists
@@ -232,8 +239,11 @@ const updateBasicInfo = async () => {
       try {
         const checkDuplicateEmail = async () => {
           try {
+            // Convert to lowercase for case-insensitive comparison
+            const emailLower = email.value.toLowerCase();
+            
             // Try a direct check of email existence without causing errors
-            const response = await fetch(`${pb.baseUrl}/api/collections/users/records?filter=(email='${email.value}')`, {
+            const response = await fetch(`${pb.baseUrl}/api/collections/users/records?filter=(LOWER(email)='${emailLower}')`, {
               method: 'GET',
               headers: {
                 'Content-Type': 'application/json',
@@ -373,9 +383,12 @@ const updateBasicInfo = async () => {
 // Helper function to check if a name already exists in the system
 const checkNameExists = async (nameToCheck: string): Promise<boolean> => {
   try {
-    // First approach: Try with filter
+    // Convert to lowercase for case-insensitive search
+    const nameToCheckLower = nameToCheck.toLowerCase();
+    
+    // First approach: Try with filter - using LOWER() function for case insensitivity
     const result = await pb.collection('users').getList(1, 1, {
-      filter: `name = "${nameToCheck}"`,
+      filter: `LOWER(name) = "${nameToCheckLower}"`,
     });
     
     if (result && result.items.length > 0) {
@@ -389,7 +402,7 @@ const checkNameExists = async (nameToCheck: string): Promise<boolean> => {
     
     // Second approach: Try with direct API request
     try {
-      const response = await fetch(`${pb.baseUrl}/api/collections/users/records?filter=(name='${nameToCheck}')`, {
+      const response = await fetch(`${pb.baseUrl}/api/collections/users/records?filter=(LOWER(name)='${nameToCheckLower}')`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -422,19 +435,27 @@ const checkNameExists = async (nameToCheck: string): Promise<boolean> => {
 // Helper function to check if an email already exists in the system
 const checkEmailExists = async (emailToCheck: string): Promise<boolean> => {
   try {
-    // First approach: Try with filter
+    // Convert to lowercase for case-insensitive search
+    const emailToCheckLower = emailToCheck.toLowerCase();
+    
+    // First approach: Try with filter - using LOWER() function for case insensitivity
     const result = await pb.collection('users').getList(1, 1, {
-      filter: `email = "${emailToCheck}"`,
+      filter: `LOWER(email) = "${emailToCheckLower}"`,
     });
     
     if (result && result.items.length > 0) {
+      // Exclude current user from the check
+      const currentUserId = pb.authStore.model?.id;
+      if (currentUserId && result.items[0].id === currentUserId) {
+        return false; // It's the current user's email, so not a duplicate
+      }
       return true;
     }
     
     // Second approach: Try with direct API request to the auth endpoint
     try {
       // Send a request to the auth API to check if the email exists
-      const response = await fetch(`${pb.baseUrl}/api/collections/users/records?filter=(email='${emailToCheck}')`, {
+      const response = await fetch(`${pb.baseUrl}/api/collections/users/records?filter=(LOWER(email)='${emailToCheckLower}')`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -444,12 +465,15 @@ const checkEmailExists = async (emailToCheck: string): Promise<boolean> => {
       
       const data = await response.json();
       
-      // Check if any items were returned
+      // Check if any items were returned (excluding current user)
       if (data && data.items && data.items.length > 0) {
-        return true;
+        const currentUserId = pb.authStore.model?.id;
+        // Filter out the current user's record
+        const otherUsers = data.items.filter((item: any) => item.id !== currentUserId);
+        return otherUsers.length > 0;
       }
     } catch (directError) {
-      console.error('Error in direct API check:', directError);
+      console.error('Error in direct API check for email:', directError);
       // Continue with the flow, don't throw
     }
     
@@ -477,8 +501,11 @@ const verifyCurrentPassword = async (password: string): Promise<boolean> => {
       // Create a new PocketBase instance to avoid affecting the current session
       const tempPb = new PocketBase("http://127.0.0.1:8090");
       
+      // Make sure email is lowercase for consistency
+      const lowercaseEmail = userEmail.toLowerCase();
+      
       // Attempt to authenticate with the provided credentials
-      await tempPb.collection('users').authWithPassword(userEmail, password);
+      await tempPb.collection('users').authWithPassword(lowercaseEmail, password);
       
       // If authentication succeeds, the password is correct
       return true;

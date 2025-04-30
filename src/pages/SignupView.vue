@@ -19,7 +19,7 @@
         >
           <div v-if="successMessage" class="p-4 mb-6 bg-green-100 border border-green-400 text-green-700 rounded">
             {{ successMessage }}
-            <div class="mt-2">
+            <div class="mt-2 flex space-x-4">
               <a 
                 href="#" 
                 @click.prevent="navigateToLogin" 
@@ -27,6 +27,13 @@
               >
                 Sign in now
               </a>
+              <button 
+                @click="resendVerification" 
+                class="text-blue-600 hover:underline"
+                :disabled="resendingVerification"
+              >
+                {{ resendingVerification ? 'Sending...' : 'Resend verification email' }}
+              </button>
             </div>
           </div>
         </transition>
@@ -276,6 +283,10 @@ export default {
       confirmPasswordError: '',
       termsError: '',
       
+      // For resending verification email
+      resendingVerification: false,
+      userEmail: '', // To store email after successful registration
+      
       // PocketBase instance
       pb: new PocketBase('http://127.0.0.1:8090')
     };
@@ -361,22 +372,28 @@ export default {
       try {
         // Create the user in PocketBase
         const userData = {
-          email: this.email,
+          email: this.email.toLowerCase(),
           password: this.password,
           passwordConfirm: this.confirmPassword,
           name: this.name,
           department: this.department,
-          role: 'user'
+          role: 'user',
+          emailVisibility: true
         };
         
-        await this.pb.collection('users').create(userData);
+        // Create the user
+        const record = await this.pb.collection('users').create(userData);
+        
+        // Send verification email
+        await this.pb.collection('users').requestVerification(userData.email);
         
         // Save credentials before displaying success message
-        const savedEmail = this.email;
+        const savedEmail = this.email.toLowerCase();
+        this.userEmail = savedEmail; // Store email for resend functionality
         const savedPassword = this.password;
         
-        // Display success message
-        this.successMessage = 'Account created successfully! You can now sign in with your credentials.';
+        // Display success message including verification instructions
+        this.successMessage = 'Account created successfully! A verification email has been sent to your email address. Please check your inbox and follow the instructions to verify your account.';
         
         // Store credentials in sessionStorage for login page to use
         sessionStorage.setItem('newUserEmail', savedEmail);
@@ -458,6 +475,33 @@ export default {
         }
       } finally {
         this.isLoading = false;
+      }
+    },
+    
+    async resendVerification() {
+      if (this.resendingVerification) return;
+      
+      this.resendingVerification = true;
+      
+      try {
+        // If we have saved the email from registration, use it
+        const emailToVerify = this.userEmail || sessionStorage.getItem('newUserEmail');
+        
+        if (!emailToVerify) {
+          this.successMessage = 'Cannot resend verification email. Email address not found.';
+          return;
+        }
+        
+        // Request verification email
+        await this.pb.collection('users').requestVerification(emailToVerify);
+        
+        // Update success message
+        this.successMessage = 'Verification email has been resent! Please check your inbox and follow the instructions to verify your account.';
+      } catch (error) {
+        console.error('Failed to resend verification:', error);
+        this.successMessage = 'Failed to resend verification email. Please try again later.';
+      } finally {
+        this.resendingVerification = false;
       }
     },
     

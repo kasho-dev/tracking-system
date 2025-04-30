@@ -26,6 +26,34 @@
             {{ errorMessage }}
           </div>
 
+          <div
+            v-if="verificationNeededMessage"
+            class="p-4 mb-6 bg-yellow-100 border border-yellow-400 text-yellow-800 rounded-md shadow-sm"
+          >
+            <div class="flex items-start">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 mt-0.5 text-yellow-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <div>
+                <p class="font-medium">Verification Required</p>
+                <p class="mt-1">{{ verificationNeededMessage }}</p>
+                <div class="mt-3">
+                  <button 
+                    @click="resendVerification" 
+                    class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition duration-200 ease-in-out text-sm font-medium flex items-center"
+                    :disabled="resendingVerification"
+                  >
+                    <svg v-if="resendingVerification" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    {{ resendingVerification ? 'Sending verification email...' : 'Resend verification email' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="flex flex-col items-center justify-center">
             <button
               @click="quickLogin"
@@ -127,6 +155,40 @@
               class="p-4 bg-red-100 border border-red-400 text-red-700 rounded"
             >
               {{ errorMessage }}
+            </div>
+          </transition>
+
+          <transition
+            enter-active-class="transition duration-300 ease-out"
+            enter-from-class="opacity-0 transform translate-y-4"
+            enter-to-class="opacity-100 transform translate-y-0"
+          >
+            <div
+              v-if="verificationNeededMessage"
+              class="p-4 mb-6 bg-yellow-100 border border-yellow-400 text-yellow-800 rounded-md shadow-sm"
+            >
+              <div class="flex items-start">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 mt-0.5 text-yellow-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <div>
+                  <p class="font-medium">Verification Required</p>
+                  <p class="mt-1">{{ verificationNeededMessage }}</p>
+                  <div class="mt-3">
+                    <button 
+                      @click="resendVerification" 
+                      class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition duration-200 ease-in-out text-sm font-medium flex items-center"
+                      :disabled="resendingVerification"
+                    >
+                      <svg v-if="resendingVerification" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      {{ resendingVerification ? 'Sending verification email...' : 'Resend verification email' }}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </transition>
 
@@ -293,6 +355,8 @@ export default {
       errorMessage: '',
       passwordError: '',
       showPassword: false,
+      verificationNeededMessage: '',
+      resendingVerification: false,
       logo,
       pb: new PocketBase('http://127.0.0.1:8090'), // Replace with your PocketBase URL
 
@@ -333,17 +397,38 @@ export default {
 
       this.isLoading = true;
       this.errorMessage = '';
+      this.verificationNeededMessage = '';
 
       try {
-        // Authenticate the user
+        // Convert email to lowercase for case insensitivity
+        const lowercaseEmail = this.email.toLowerCase();
+        
+        // Authenticate the user with lowercase email
         const authData = await this.pb.collection('users').authWithPassword(
-          this.email,
+          lowercaseEmail,
           this.password
         );
 
-        // Only proceed if we have a valid auth response
+        // Check if login succeeded but user is not verified
+        console.log("Auth successful, checking verification status...");
         if (authData && this.pb.authStore.isValid) {
-          console.log('Login successful!', authData);
+          console.log("Verification status:", authData.record.verified);
+          
+          // If user is not verified, prevent login and show message
+          if (authData.record.verified === false) {
+            console.log("User not verified, clearing auth and showing message");
+            // Clear the auth since we don't want unverified users to proceed
+            this.pb.authStore.clear();
+            localStorage.removeItem('pocketbase_auth');
+            sessionStorage.removeItem('pocketbase_auth');
+            
+            // Display verification message
+            this.verificationNeededMessage = 'Your email address has not been verified. Please check your inbox and spam folder for the verification email and confirm your account before signing in.';
+            this.isLoading = false;
+            return;
+          }
+
+          console.log('Login successful and user is verified!', authData);
 
           // Store auth data based on remember me option
           const authStoreData = this.pb.authStore.exportToCookie();
@@ -354,7 +439,7 @@ export default {
 
             // Save additional user info for quick login
             const userInfo = {
-              email: this.email,
+              email: lowercaseEmail,
               password: this.password, // Store encrypted or hashed in a real production app
               name: this.pb.authStore.model?.name || '',
               avatar: this.pb.authStore.model?.avatar ? this.pb.files.getUrl(this.pb.authStore.model, this.pb.authStore.model.avatar) : ''
@@ -405,18 +490,42 @@ export default {
 
       this.isLoading = true;
       this.errorMessage = '';
+      this.verificationNeededMessage = '';
 
       try {
         console.log('Attempting quick login with:', this.rememberedUserEmail);
 
-        // Use stored credentials for quick login
+        // Convert email to lowercase for case insensitivity
+        const lowercaseEmail = this.rememberedUserEmail.toLowerCase();
+        
+        // Use stored credentials for quick login with lowercase email
         const authData = await this.pb.collection('users').authWithPassword(
-          this.rememberedUserEmail,
+          lowercaseEmail,
           this.rememberedUserPassword
         );
 
+        // Check if login succeeded but user is not verified
+        console.log("Quick login successful, checking verification status...");
         if (authData && this.pb.authStore.isValid) {
-          console.log('Quick login successful!', authData);
+          console.log("Verification status:", authData.record.verified);
+          
+          // If user is not verified, prevent login and show message
+          if (authData.record.verified === false) {
+            console.log("User not verified, clearing auth and showing message");
+            // Clear the auth since we don't want unverified users to proceed
+            this.pb.authStore.clear();
+            localStorage.removeItem('pocketbase_auth');
+            sessionStorage.removeItem('pocketbase_auth');
+            
+            // Display verification message and switch to regular login
+            this.verificationNeededMessage = 'Your email address has not been verified. Please check your inbox and spam folder for the verification email and confirm your account before signing in.';
+            this.isLoading = false;
+            this.clearQuickLogin(); // Fall back to regular login
+            this.email = lowercaseEmail; // Pre-fill the email for convenience
+            return;
+          }
+          
+          console.log('Quick login successful and user is verified!', authData);
 
           // Store auth data in localStorage (since this is a remembered user)
           const authStoreData = this.pb.authStore.exportToCookie();
@@ -441,8 +550,12 @@ export default {
         }
       } catch (error) {
         console.error('Quick login failed:', error);
-        this.errorMessage = 'Quick login failed. Please sign in manually.';
+        
+        // Clear auth and quick login data
+        this.pb.authStore.clear();
         this.clearQuickLogin();
+        
+        this.errorMessage = 'Quick login failed. Please sign in manually.';
       } finally {
         this.isLoading = false;
       }
@@ -463,7 +576,35 @@ export default {
       console.log('Forgot password clicked');
       // You might redirect to a password reset page
       this.$router.push('/forgot-password');
-    }
+    },
+
+    async resendVerification() {
+      if (this.resendingVerification || !this.email) return;
+      
+      this.resendingVerification = true;
+      
+      try {
+        // Convert email to lowercase for case insensitivity
+        const lowercaseEmail = this.email.toLowerCase();
+        
+        // Request verification email
+        await this.pb.collection('users').requestVerification(lowercaseEmail);
+        
+        // Update the verification message to indicate success
+        this.verificationNeededMessage = 'Verification email has been resent! Please check your inbox and spam folder. You must verify your email address before signing in.';
+      } catch (error) {
+        console.error('Failed to resend verification:', error);
+        
+        // Handle specific error cases
+        if (error.status === 404) {
+          this.verificationNeededMessage = 'We couldn\'t find an account with this email address. Please check your email or create a new account.';
+        } else {
+          this.verificationNeededMessage = 'Failed to resend verification email. Please try again later or contact support if the problem persists.';
+        }
+      } finally {
+        this.resendingVerification = false;
+      }
+    },
   },
 
   mounted() {

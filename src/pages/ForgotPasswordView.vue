@@ -168,7 +168,7 @@ export default {
       
       try {
         // Request password reset using PocketBase's built-in functionality
-        await this.pb.collection('users').requestPasswordReset(this.email);
+        await this.pb.collection('users').requestPasswordReset(this.email.toLowerCase());
         
         // Show success message
         this.successMessage = 'Password reset instructions have been sent to your email. Please check your inbox and spam folder.';
