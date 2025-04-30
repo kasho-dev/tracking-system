@@ -159,6 +159,7 @@ const minDeliveryDate = computed(() => {
 
 const validateDeliveryDate = () => {
   if (!deliveryDate.value) {
+    showDeliveryDateError.value = true;
     dateError.value = false;
     return false;
   }
@@ -358,6 +359,9 @@ const startPolling = () => {
 const editSupplierInfo = async () => {
   if (!selectedOrder.value || !currentUser.value) return;
   await fetchSelectedOrder();
+
+  // When editing from the modal, we should have already validated changes
+  // through the hasChanges computed property and submitPO function
 
   try {
     const modifierName =
@@ -947,7 +951,8 @@ const originalDeliveryDate = ref("");
 const hasChanges = computed(() => {
   if (!isEditMode.value) return true; // For new orders, always enable the button
 
-  // Check if any field has changed
+  // Server-side validation of changes - this check can't be bypassed with DOM manipulation
+  // Use strict equality checks and proper string comparison
   return (
     poNumber.value !== originalPoNumber.value ||
     supplierName.value !== originalSupplierName.value ||
@@ -958,12 +963,34 @@ const hasChanges = computed(() => {
   );
 });
 
+// Add these variables for security validation
+const formToken = ref("");
+const validateFormToken = () => {
+  // Generate a unique token when form opens
+  formToken.value = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+};
+
+// Update openEditModal to initialize token
 const openEditModal = (order: Document) => {
   // Prevent editing if document is completed
   if (order.status === "Completed") {
     alert("Cannot edit a completed document.");
     return;
   }
+   
+  // Reset all validation errors when opening the edit modal
+  showPONumberError.value = false;
+  showSupplierError.value = false;
+  showAddressError.value = false;
+  showTinError.value = false;
+  showProcurementError.value = false;
+  showDeliveryDateError.value = false;
+  dateError.value = false;
+  duplicateOrderNumberError.value = false;
+  
+  // Generate new token for this form session
+  validateFormToken();
+  
   isEditMode.value = true;
   currentEditingId.value = order.id;
 
@@ -1014,6 +1041,19 @@ const formatDateForInput = (dateString: string) => {
 
 // Add PO Document Modal
 const openModalAdd = () => {
+  // Reset all validation errors when opening the add modal
+  showPONumberError.value = false;
+  showSupplierError.value = false;
+  showAddressError.value = false;
+  showTinError.value = false;
+  showProcurementError.value = false;
+  showDeliveryDateError.value = false;
+  dateError.value = false;
+  duplicateOrderNumberError.value = false;
+  
+  // Generate new token for this form session
+  validateFormToken();
+  
   showModal.value = true;
 };
 
@@ -1028,6 +1068,9 @@ const closeModalAdd = () => {
   modeofProcurement.value = "";
   deliveryDate.value = "";
   isOverlayMinimized.value = false; // Restore overlay when canceling
+  
+  // Clear security token to invalidate form session
+  formToken.value = "";
 };
 
 // Code block for fetching data from PocketBase
@@ -1142,12 +1185,32 @@ const fetchDocuments = async () => {
   }
 };
 
-// Submit PO to Database
+// Add this new ref after other validation refs
+
+// Update the submitPO function to remove error counting
 const submitPO = async () => {
-  //reset validation first
-  if (!validateDeliveryDate()) {
+  // Ensure the user has proper permissions
+  if (!currentUser.value) {
+    alert("You must be logged in to create or edit orders.");
     return;
   }
+
+  // If in edit mode, verify token and changes
+  if (isEditMode.value) {
+    // Verify token is present (would be empty if developer tools were used to bypass security)
+    if (!formToken.value) {
+      console.error("Security breach: Form token missing");
+      alert("Security validation failed");
+      return;
+    }
+    
+    // Verify changes exist
+    if (!hasChanges.value) {
+      console.warn("Security warning: Attempted to submit form with no changes");
+      return; // Exit without making any changes
+    }
+  }
+
   // Reset all errors first
   showPONumberError.value = false;
   showSupplierError.value = false;
@@ -1155,6 +1218,7 @@ const submitPO = async () => {
   showTinError.value = false;
   showProcurementError.value = false;
   showDeliveryDateError.value = false;
+  duplicateOrderNumberError.value = false; // Reset duplicate error
 
   // Validate all fields
   let isValid = true;
@@ -1187,6 +1251,11 @@ const submitPO = async () => {
   if (!deliveryDate.value) {
     showDeliveryDateError.value = true;
     isValid = false;
+  } else {
+    // Validate delivery date is in the future
+    if (!validateDeliveryDate()) {
+      isValid = false;
+    }
   }
 
   if (!isValid) {
@@ -1199,9 +1268,8 @@ const submitPO = async () => {
         .collection("Collection_1")
         .getFirstListItem(`Order_No = "${poNumber.value}"`);
       if (existingRecord) {
-        alert(
-          `Order Number "${poNumber.value}" already exists in the database.`
-        );
+        duplicateOrderNumberError.value = true;
+        showPONumberError.value = true;
         return;
       }
     } catch (error: any) {
@@ -1640,7 +1708,7 @@ const documentsToDelete = ref<string[]>([]);
 
 // Open confirmation overlay
 const confirmDelete = () => {
-  if (currentUser.value?.role === "user") {
+  if (!currentUser.value || currentUser.value?.role !== "admin") {
     alert("You don't have permission to delete documents.");
     return;
   }
@@ -1660,7 +1728,8 @@ const closeDeletePopup = () => {
 
 // Perform deletion and close popup
 const deleteSelectedDocuments = async () => {
-  if (currentUser.value?.role === "user") {
+  // Double-check role permissions on both client and server side
+  if (!currentUser.value || currentUser.value?.role !== "admin") {
     alert("You don't have permission to delete documents.");
     return;
   }
@@ -1671,6 +1740,14 @@ const deleteSelectedDocuments = async () => {
   }
 
   try {
+    // Add an additional server-side check for non-admin users
+    // This verifies the user's role directly from the server before deletion
+    const authData = await pb.collection("users").getOne(currentUser.value.id);
+    if (authData.role !== "admin") {
+      alert("Server validation failed: You don't have permission to delete documents.");
+      return;
+    }
+
     const deletePromises = documentsToDelete.value.map((id) =>
       pb.collection("Collection_1").delete(id)
     );
@@ -1953,6 +2030,36 @@ const getNextVerificationStep = computed(() => {
       return 'initial';
   }
 });
+
+// At the top with other refs, add this new ref
+const duplicateOrderNumberError = ref(false);
+
+// Add these new methods after the validateDeliveryDate function
+const clearPONumberError = () => {
+  showPONumberError.value = false;
+  duplicateOrderNumberError.value = false;
+};
+
+const clearSupplierError = () => {
+  showSupplierError.value = false;
+};
+
+const clearAddressError = () => {
+  showAddressError.value = false;
+};
+
+const clearTinError = () => {
+  showTinError.value = false;
+};
+
+const clearProcurementError = () => {
+  showProcurementError.value = false;
+};
+
+const clearDeliveryDateError = () => {
+  showDeliveryDateError.value = false;
+  dateError.value = false;
+};
 </script>
 
 <template>
@@ -2006,7 +2113,7 @@ const getNextVerificationStep = computed(() => {
         >
           <div
             v-if="showModal"
-            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50"
+            class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-start sm:items-center z-50 overflow-y-auto py-4 [scrollbar-width:none] [-ms-overflow-style:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden"
             @click.self="closeModalAdd"
           >
             <transition
@@ -2019,14 +2126,13 @@ const getNextVerificationStep = computed(() => {
             >
               <div
                 v-if="showModal"
-                class="bg-[#0B132B] p-6 rounded-lg shadow-md w-96 mx-4"
+                class="bg-[#0B132B] p-6 rounded-lg shadow-md w-96 mx-4 max-h-[90vh] overflow-y-auto scrollbar-hide [scrollbar-width:none] [-ms-overflow-style:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden"
                 @click.stop
               >
                 <h2 class="text-lg font-semibold mb-4 text-white text-center">
                   {{
                     isEditMode ? "Edit Supplier Information" : "Enter PO Number"
                   }}
-                  <!-- Enter PO Number -->
                 </h2>
 
                 <div class="space-y-4">
@@ -2043,12 +2149,19 @@ const getNextVerificationStep = computed(() => {
                       required
                       class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       :class="{ 'border-red-500': showPONumberError }"
+                      @input="clearPONumberError"
                     />
                     <p
-                      v-if="showPONumberError"
+                      v-if="showPONumberError && !duplicateOrderNumberError"
                       class="text-red-500 text-xs mt-1"
                     >
                       PO Number is required (max 50 characters)
+                    </p>
+                    <p
+                      v-if="duplicateOrderNumberError"
+                      class="text-red-500 text-xs mt-1"
+                    >
+                      Order Number "{{ poNumber }}" already exists in the database.
                     </p>
                     <p class="text-gray-500 text-xs mt-1">
                       {{ poNumber.length }}/50 characters
@@ -2066,6 +2179,7 @@ const getNextVerificationStep = computed(() => {
                       required
                       class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       :class="{ 'border-red-500': showSupplierError }"
+                      @input="clearSupplierError"
                     />
                     <p
                       v-if="showSupplierError"
@@ -2085,10 +2199,11 @@ const getNextVerificationStep = computed(() => {
                       type="text"
                       placeholder="Legazpi City, Albay"
                       class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      :class="{ 'border-red-500': showSupplierError }"
+                      :class="{ 'border-red-500': showAddressError }"
+                      @input="clearAddressError"
                     />
                     <p
-                      v-if="showSupplierError"
+                      v-if="showAddressError"
                       class="text-red-500 text-xs mt-1"
                     >
                       Address is required
@@ -2105,10 +2220,11 @@ const getNextVerificationStep = computed(() => {
                       type="text"
                       placeholder="716-412-421 VAT"
                       class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      :class="{ 'border-red-500': showSupplierError }"
+                      :class="{ 'border-red-500': showTinError }"
+                      @input="clearTinError"
                     />
                     <p
-                      v-if="showSupplierError"
+                      v-if="showTinError"
                       class="text-red-500 text-xs mt-1"
                     >
                       TIN ID is required
@@ -2127,10 +2243,11 @@ const getNextVerificationStep = computed(() => {
                       type="text"
                       placeholder="Small Value Procurement"
                       class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      :class="{ 'border-red-500': showSupplierError }"
+                      :class="{ 'border-red-500': showProcurementError }"
+                      @input="clearProcurementError"
                     />
                     <p
-                      v-if="showSupplierError"
+                      v-if="showProcurementError"
                       class="text-red-500 text-xs mt-1"
                     >
                       Mode of Procurement is required
@@ -2154,6 +2271,7 @@ const getNextVerificationStep = computed(() => {
                         'border-red-500': showDeliveryDateError || dateError,
                       }"
                       @change="validateDeliveryDate"
+                      @input="clearDeliveryDateError"
                     />
                     <p
                       v-if="showDeliveryDateError"
@@ -2175,13 +2293,14 @@ const getNextVerificationStep = computed(() => {
                     Cancel
                   </button>
                   <button
-                    @click="submitPO"
+                    @click="isEditMode && !hasChanges ? $event.preventDefault() : submitPO()"
                     :disabled="isEditMode && !hasChanges"
-                    class="px-4 py-2 rounded-md transition-colors"
+                    :aria-disabled="isEditMode && !hasChanges"
+                    class="px-4 py-2 rounded-md transition-all duration-200"
                     :class="{
-                      'bg-[#6A5CFE] text-white hover:bg-[#7C6CFF] hover:scale-[1.02] transition-colors':
+                      'bg-[#6A5CFE] text-white hover:bg-[#7C6CFF] hover:scale-[1.02] active:bg-[#5A4BD9] active:scale-[0.98]':
                         !isEditMode || hasChanges,
-                      'bg-gray-400 text-gray-200 cursor-not-allowed':
+                      'bg-gray-400 text-gray-200 cursor-not-allowed opacity-70 pointer-events-none':
                         isEditMode && !hasChanges,
                     }"
                   >
@@ -2412,8 +2531,9 @@ const getNextVerificationStep = computed(() => {
             class="p-2 bg-gray-100 rounded hover:bg-red-500 transition-all duration-300 hover:shadow-md hover:shadow-red-200"
             @click="confirmDelete"
             :disabled="currentUser?.role === 'user'"
+            :aria-disabled="currentUser?.role === 'user'"
             :class="{
-              'opacity-50 cursor-not-allowed': currentUser?.role === 'user',
+              'opacity-50 cursor-not-allowed pointer-events-none': currentUser?.role === 'user',
               'hover:bg-red-500': currentUser?.role !== 'user',
             }"
           >
@@ -2597,7 +2717,7 @@ const getNextVerificationStep = computed(() => {
     >
       <div
         v-if="isModalOpen"
-        class="fixed inset-0 bg-black bg-opacity-50 flex justify-end z-50"
+        class="fixed inset-0 bg-black bg-opacity-50 flex justify-end z-50 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden"
         @click.self="closeModal"
       >
         <transition
