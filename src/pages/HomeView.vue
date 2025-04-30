@@ -4,7 +4,7 @@
 // import Button from "primevue/button";
 // import { defineStore } from "pinia";
 // Test Commit
-import { onMounted, ref, computed, onUnmounted } from "vue";
+import { onMounted, ref, computed, onUnmounted, watch } from "vue";
 import { useSearchStore } from "../stores/searchStore"; // Import the Pinia store
 import * as XLSX from "xlsx";
 import Timeline from "primevue/timeline";
@@ -22,6 +22,18 @@ import {
   ChevronUp,
   ChevronDown,
 } from "lucide-vue-next";
+
+// Add to the top of the script section
+const props = defineProps<{
+  selectedDoc: any
+}>();
+
+// Add the watch effect for selectedDoc
+watch(() => props.selectedDoc, (newDoc) => {
+  if (newDoc) {
+    openModal(newDoc);
+  }
+}, { immediate: true });
 
 // Define the type for documents
 interface FieldChange {
@@ -2059,6 +2071,33 @@ const clearProcurementError = () => {
 const clearDeliveryDateError = () => {
   showDeliveryDateError.value = false;
   dateError.value = false;
+};
+
+// Update the deleteDocument function
+const deleteDocument = async (doc: Document) => {
+  try {
+    if (confirm("Are you sure you want to delete this document?")) {
+      // Delete the document
+      await pb.collection("Collection_1").delete(doc.id);
+      documents.value = documents.value.filter((d) => d.id !== doc.id);
+      
+      // Dispatch delete event
+      const deleteEvent = new CustomEvent('orderDeleted', {
+        detail: {
+          orderNo: doc.orderNumber,
+          deletedBy: pb.authStore.model?.name || pb.authStore.model?.email || 'Unknown User'
+        }
+      });
+      window.dispatchEvent(deleteEvent);
+
+      // Close overlay if the deleted document was being viewed
+      if (selectedOrder.value?.id === doc.id) {
+        isOverlayOpen.value = false;
+      }
+    }
+  } catch (error) {
+    console.error("Error deleting document:", error);
+  }
 };
 </script>
 

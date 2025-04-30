@@ -1,25 +1,22 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { ConfirmDialog, Toast } from "primevue";
+import {ConfirmDialog,Toast} from "primevue";
 import TopNav from "./components/TopNav.vue";
+import { useRoute } from "vue-router";
+import { ref } from "vue";
 
-const showNav = ref(true);
+const route = useRoute();
+const selectedDoc = ref(null);
 
-// Event handlers for navigation visibility
-const hideNav = () => {
-  showNav.value = false;
-};
-
-const showNavigation = () => {
-  showNav.value = true;
+const openModal = (doc: any) => {
+  selectedDoc.value = doc;
 };
 </script>
 
 <template class="app-root">
   <Toast />
   <ConfirmDialog />
-  <TopNav v-if="showNav" />
-  <RouterView @hide-nav="hideNav" @show-nav="showNavigation" />
+  <TopNav @openModal="openModal" />
+  <RouterView :selectedDoc="selectedDoc" />
 </template>
 
 <style scoped>
