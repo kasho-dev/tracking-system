@@ -246,7 +246,7 @@ const handleNotificationClick = async (notification: any) => {
           orderNumber: order.Order_No,
           status: order.status,
           dateCreated: order.created,
-          createdBy: order.expand?.createdBy?.name || order.createdBy || 'System',
+          createdBy: order.createdByName || 'System',
           verificationEvents: order.verificationEvents || [],
           expand: order.expand,
           supplierName: order.supplierName,
@@ -421,7 +421,7 @@ const getNotificationIcon = (notification: any) => {
         </div>
 
         <!-- Notification Button -->
-        <div class="relative notification-icon">
+        <div class="relative notification-icon" v-if="!isSettingsPage">
           <div 
             class="cursor-pointer p-2 rounded-full hover:bg-gray-700 transition relative"
             @click="toggleNotifications"

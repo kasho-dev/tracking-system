@@ -1639,7 +1639,6 @@ const downloadSelectedDocuments = () => {
 ORDER INFORMATION
 =============================================
 Order Details: ${doc.orderNumber}
-Tracking ID: ${doc.trackingId}
 Created at: ${doc.dateCreated}
 Status: ${doc.status}
 Handled By: ${doc.handledBy}
