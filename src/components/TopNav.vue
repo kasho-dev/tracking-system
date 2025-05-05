@@ -57,9 +57,17 @@ const closeDropdown = (event: MouseEvent) => {
 // Handle logout
 const handleLogout = async () => {
   try {
+    // Clear all auth data
     pb.authStore.clear();
+    localStorage.removeItem('pocketbase_auth');
+    sessionStorage.removeItem('pocketbase_auth');
+    localStorage.removeItem('remembered_user');
+    
+    // Close dropdown
     isDropdownOpen.value = false;
-    router.push('/login');
+    
+    // Force redirect to login page
+    window.location.replace('/login');
   } catch (error) {
     console.error('Logout failed:', error);
   }

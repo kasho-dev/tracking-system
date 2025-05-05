@@ -5,7 +5,7 @@
     <transition
       appear
       enter-active-class="transition duration-500 ease-out"
-      enter-from-class="opacity-0 transform scale-95"
+      enter-from-class="opacity-0 transform scale-95" 
       enter-to-class="opacity-100 transform scale-100"
     >
       <div class="bg-white rounded-lg shadow-md w-full max-w-md p-8">
