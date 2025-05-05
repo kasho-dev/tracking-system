@@ -1601,9 +1601,9 @@ const submitPO = async () => {
 const activeButton = ref("Documents"); // Default active button
 
 const setActive = (status: string) => {
+  // Reset display limit when changing filters
+  documentDisplayLimit.value = 10;
   activeButton.value = status;
-
-  // Ensure "Documents" triggers download function
 };
 
 /// MODAL 2
@@ -2253,6 +2253,45 @@ const calculateLapseDate = (deliveryDate: string | null): string | null => {
     timeZone: "Asia/Manila",
   });
 };
+
+// Add document display limit variables
+const documentDisplayLimit = ref(10);
+const incrementDisplayBy = 10;
+const isLoadingMore = ref(false);
+
+// Modify the filteredDocuments computed property to also factor in the display limit
+const displayedDocuments = computed(() => {
+  return sortedDocuments.value.slice(0, documentDisplayLimit.value);
+});
+
+// Check if there are more documents to load
+const hasMoreDocuments = computed(() => {
+  return documentDisplayLimit.value < sortedDocuments.value.length;
+});
+
+// Function to load more documents with loading state
+const loadMoreDocuments = () => {
+  isLoadingMore.value = true;
+  
+  // Use setTimeout to simulate loading (helps with UI feedback)
+  setTimeout(() => {
+    documentDisplayLimit.value += incrementDisplayBy;
+    isLoadingMore.value = false;
+  }, 300);
+};
+
+// Display counts for table
+const documentCountDisplay = computed(() => {
+  const displayed = displayedDocuments.value.length;
+  const total = sortedDocuments.value.length;
+  return `Showing ${displayed} of ${total} documents`;
+});
+
+// Update search mechanism to reset display limit when search query changes
+watch(() => searchStore.searchQuery, () => {
+  // Reset display limit when search query changes
+  documentDisplayLimit.value = 10;
+});
 </script>
 
 <template>
@@ -2836,12 +2875,10 @@ const calculateLapseDate = (deliveryDate: string | null): string | null => {
           <table class="w-full border-collapse bg-white">
             <tbody>
               <tr
-                v-for="(doc, index) in sortedDocuments"
+                v-for="(doc, index) in displayedDocuments"
                 :key="doc.id"
                 class="border-b hover:bg-gray-200 text-sm relative"
               >
-                <!-- New document indicator (absolute positioned dot) -->
-
                 <!-- Checkbox Cell -->
                 <td class="w-12 p-3 text-left relative">
                   <input
@@ -2895,6 +2932,32 @@ const calculateLapseDate = (deliveryDate: string | null): string | null => {
               </tr>
             </tbody>
           </table>
+        </div>
+        
+        <!-- Document Count -->
+        <div class="mt-2 text-sm text-gray-500 text-right">
+          {{ documentCountDisplay }}
+        </div>
+        
+        <!-- Load More Button -->
+        <div v-if="hasMoreDocuments" class="mt-4 flex justify-center">
+          <button
+            @click="loadMoreDocuments"
+            :disabled="isLoadingMore"
+            class="px-6 py-2 bg-[#6A5CFE] text-white font-medium rounded-lg transition-all duration-200 hover:bg-[#7C6CFF] hover:shadow-lg hover:shadow-[#6A5CFE]/30 active:scale-95 active:shadow-[#6A5CFE]/75 active:bg-[#5A4BD9] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <svg 
+              v-if="isLoadingMore" 
+              class="animate-spin -ml-1 mr-2 h-5 w-5 text-white" 
+              xmlns="http://www.w3.org/2000/svg" 
+              fill="none" 
+              viewBox="0 0 24 24"
+            >
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            {{ isLoadingMore ? 'Loading...' : 'Load More' }}
+          </button>
         </div>
       </div>
     </transition>

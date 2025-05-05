@@ -91,6 +91,11 @@ const notifications = ref<any[]>([]);
 const isNotificationOpen = ref(false);
 const unreadCount = ref(0);
 
+// Add notification display limit variables
+const notificationDisplayLimit = ref(20);
+const incrementNotificationsBy = 20;
+const isLoadingMoreNotifications = ref(false);
+
 // Add at the top of the script with other imports
 const deletedOrders = ref([{
   id: 'deleted-test',
@@ -233,6 +238,9 @@ const toggleNotifications = () => {
       }
     });
     unreadCount.value = 0;
+  } else {
+    // Reset notification display limit when closing the dropdown
+    notificationDisplayLimit.value = 20;
   }
 };
 
@@ -241,6 +249,8 @@ const closeNotification = (event: MouseEvent) => {
   const target = event.target as HTMLElement;
   if (!target.closest('.notification-icon')) {
     isNotificationOpen.value = false;
+    // Reset notification display limit when closing the dropdown
+    notificationDisplayLimit.value = 20;
   }
 };
 
@@ -342,19 +352,43 @@ const getTimeGroup = (timestamp: string) => {
   return 'Last Month';
 };
 
-// Group notifications by time
+// Group notifications by time with display limit
 const groupedNotifications = computed(() => {
   const groups: Record<string, any[]> = {};
   
+  // Calculate total notifications across all groups
+  let totalCount = 0;
+  
   notifications.value.forEach(notification => {
+    // Break the loop if we've reached the display limit
+    if (totalCount >= notificationDisplayLimit.value) {
+      return;
+    }
+    
     const group = getTimeGroup(notification.timestamp);
     if (!groups[group]) {
       groups[group] = [];
     }
+    
     groups[group].push(notification);
+    totalCount++;
   });
   
   return groups;
+});
+
+// Check if there are more notifications to load
+const hasMoreNotifications = computed(() => {
+  return notifications.value.length > notificationDisplayLimit.value;
+});
+
+// Total count of notifications being displayed
+const displayedNotificationsCount = computed(() => {
+  let count = 0;
+  Object.values(groupedNotifications.value).forEach(group => {
+    count += group.length;
+  });
+  return count;
 });
 
 // Add function to format relative time
@@ -413,6 +447,17 @@ const getNotificationIcon = (notification: any) => {
     component: Bell,
     class: 'text-blue-500'
   };
+};
+
+// Function to load more notifications
+const loadMoreNotifications = () => {
+  isLoadingMoreNotifications.value = true;
+  
+  // Use setTimeout to simulate loading (helps with UI feedback)
+  setTimeout(() => {
+    notificationDisplayLimit.value += incrementNotificationsBy;
+    isLoadingMoreNotifications.value = false;
+  }, 300);
 };
 </script>
 
@@ -510,6 +555,32 @@ const getNotificationIcon = (notification: any) => {
                       </div>
                     </div>
                   </div>
+                </div>
+                
+                <!-- Notification Count -->
+                <div class="px-4 py-2 text-xs text-gray-500 text-right border-t border-gray-100">
+                  Showing {{ displayedNotificationsCount }} of {{ notifications.length }} notifications
+                </div>
+                
+                <!-- Load More Button -->
+                <div v-if="hasMoreNotifications" class="px-4 py-2 border-t border-gray-100">
+                  <button
+                    @click.stop="loadMoreNotifications"
+                    :disabled="isLoadingMoreNotifications"
+                    class="w-full px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded transition-all duration-200 flex items-center justify-center"
+                  >
+                    <svg 
+                      v-if="isLoadingMoreNotifications" 
+                      class="animate-spin -ml-1 mr-2 h-4 w-4 text-gray-700" 
+                      xmlns="http://www.w3.org/2000/svg" 
+                      fill="none" 
+                      viewBox="0 0 24 24"
+                    >
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    {{ isLoadingMoreNotifications ? 'Loading...' : 'Load More' }}
+                  </button>
                 </div>
               </div>
               <div v-else class="px-4 py-3 text-xs text-gray-500 text-center">
