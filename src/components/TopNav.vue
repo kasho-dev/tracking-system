@@ -111,6 +111,29 @@ const formatNotificationMessage = (order: any) => {
   const deliveryDate = order.deliveryDate ? new Date(order.deliveryDate) : null;
   const now = new Date();
   
+  // Calculate time differences if delivery date exists
+  if (deliveryDate) {
+    const daysAfterDelivery = (now.getTime() - deliveryDate.getTime()) / (1000 * 60 * 60 * 24);
+    
+    // Show lapse countdown if within the 5-day window after delivery date
+    if (daysAfterDelivery > 0 && daysAfterDelivery < 5) {
+      const hoursUntilLapse = (5 * 24) - (daysAfterDelivery * 24);
+      if (hoursUntilLapse > 24) {
+        const daysUntilLapse = Math.ceil(5 - daysAfterDelivery);
+        return `will fully lapse in ${daysUntilLapse} day${daysUntilLapse > 1 ? 's' : ''}.`;
+      } else {
+        const roundedHours = Math.ceil(hoursUntilLapse);
+        if (roundedHours > 1) {
+          return `will fully lapse in ${roundedHours} hours.`;
+        } else {
+          const minutesUntilLapse = Math.ceil(hoursUntilLapse * 60);
+          return `will fully lapse in ${minutesUntilLapse} mins.`;
+        }
+      }
+    }
+  }
+
+  // Return appropriate status messages
   if (status === 'Completed') {
     return 'has been completed and verified.';
   } else if (status === 'Needs Action') {
@@ -119,25 +142,13 @@ const formatNotificationMessage = (order: any) => {
     return 'has lapsed.';
   } else if (status === 'Extended') {
     return 'has been extended.';
-  } else if (status === 'Pending' || status === 'Verified') {
-    if (deliveryDate) {
-      const diffDays = Math.ceil((deliveryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-      
-      if (diffDays <= 0) {
-        const gracePeriod = 5;
-        const daysOverdue = Math.abs(diffDays);
-        if (daysOverdue > gracePeriod) {
-          return 'has lapsed.';
-        } else {
-          return `is due (${gracePeriod - daysOverdue} days remaining).`;
-        }
-      } else if (diffDays <= 3) {
-        return 'is almost due.';
-      }
-    }
+  } else if (status === 'Verified') {
+    return 'has been verified.';
+  } else if (status === 'Pending') {
     return 'is pending.';
   }
-  return '';
+
+  return 'status has been updated.';
 };
 
 // Function to check if order has been modified
@@ -367,7 +378,7 @@ const getRelativeTime = (timestamp: string) => {
 // Update the getNotificationIcon function
 const getNotificationIcon = (notification: any) => {
   // Check if it's a deleted notification
-  if (deletedOrders.value.find(d => d.orderNo === notification.orderNo)) {
+  if (notification.message.includes('deleted')) {
     return {
       component: Trash,
       class: 'text-red-500'
@@ -385,24 +396,21 @@ const getNotificationIcon = (notification: any) => {
       component: AlertTriangle,
       class: 'text-red-500'
     };
-  } else if (notification.message.includes('due') || notification.message.includes('almost due')) {
+  } else if (notification.message.includes('will fully lapse')) {
+    return {
+      component: Clock,
+      class: 'text-orange-500'
+    };
+  } else if (notification.message.includes('almost due')) {
     return {
       component: Clock,
       class: 'text-yellow-500'
     };
-  } else if (notification.message.includes('needs action')) {
-    return {
-      component: AlertCircle,
-      class: 'text-orange-500'
-    };
-  } else if (notification.message.includes('extended')) {
-    return {
-      component: ArrowUpCircle,
-      class: 'text-blue-500'
-    };
   }
+
+  // Default icon
   return {
-    component: Clock,
+    component: Bell,
     class: 'text-blue-500'
   };
 };

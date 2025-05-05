@@ -112,22 +112,31 @@ const isNewDocument = (doc: Document) => {
 
 // Add this computed property after isNewDocument
 const getDeliveryWarning = (doc: Document) => {
-  if (!doc.deliveryDate || doc.status === 'Completed' || doc.status === 'Lapsed') return null;
+  // Only return null if no delivery date or if already completed
+  if (!doc.deliveryDate || doc.status === 'Completed') return null;
   
   const now = new Date();
   const deliveryDate = new Date(doc.deliveryDate);
-  const diffDays = Math.ceil((deliveryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
   
-  // If document is due within 24 hours
-  if (diffDays === 0) {
+  // Calculate hours difference (more precise than days)
+  const diffHours = (deliveryDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+  
+  // Calculate days after delivery date
+  const daysAfterDelivery = (now.getTime() - deliveryDate.getTime()) / (1000 * 60 * 60 * 24);
+  
+  // Show "Due Today" if:
+  // 1. Within 24 hours before delivery date OR
+  // 2. After delivery date but before lapsing (5 days)
+  if ((diffHours <= 24 && diffHours > -120) || // -120 hours = 5 days
+      (daysAfterDelivery > 0 && daysAfterDelivery < 5)) {
     return {
       text: 'Due Today',
       color: 'bg-red-100 text-red-800'
     };
   }
   
-  // If document is due within 3 days
-  if (diffDays > 0 && diffDays <= 3) {
+  // Show "Almost Due" if more than 24 hours but within 3 days before delivery
+  if (diffHours > 24 && diffHours <= 72) {
     return {
       text: 'Almost Due',
       color: 'bg-yellow-100 text-yellow-800'
@@ -1037,25 +1046,19 @@ const sortedDocuments = computed(() => {
   const direction = sortDirection.value;
 
   return [...filteredDocuments.value].sort((a, b) => {
-    // Handle date fields differently (creation or last update)
-    if (field === "dateCreated" || field === "updated") {
-      // Fallback to creation date if updated is missing
-      const dateA =
-        field === "dateCreated" ? a.dateCreated : a.updated ?? a.dateCreated;
-      const dateB =
-        field === "dateCreated" ? b.dateCreated : b.updated ?? b.dateCreated;
-      const timeA = new Date(dateA).getTime();
-      const timeB = new Date(dateB).getTime();
-      return direction === "asc" ? timeA - timeB : timeB - timeA;
+    // If sorting by a specific column other than dates
+    if (field !== 'dateCreated' && field !== 'updated') {
+      const valueA = String(a[field as keyof Document]).toLowerCase();
+      const valueB = String(b[field as keyof Document]).toLowerCase();
+      return direction === 'asc' 
+        ? valueA.localeCompare(valueB)
+        : valueB.localeCompare(valueA);
     }
 
-    // Handle string fields
-    const valueA = String(a[field as keyof Document]).toLowerCase();
-    const valueB = String(b[field as keyof Document]).toLowerCase();
-
-    if (valueA < valueB) return direction === "asc" ? -1 : 1;
-    if (valueA > valueB) return direction === "asc" ? 1 : -1;
-    return 0;
+    // For date-based sorting, use the selected field (dateCreated or updated)
+    const dateA = field === 'dateCreated' ? new Date(a.dateCreated).getTime() : new Date(a.updated || a.dateCreated).getTime();
+    const dateB = field === 'dateCreated' ? new Date(b.dateCreated).getTime() : new Date(b.updated || b.dateCreated).getTime();
+    return direction === 'asc' ? dateA - dateB : dateB - dateA;
   });
 });
 
@@ -1891,11 +1894,25 @@ const deleteSelectedDocuments = async () => {
       return;
     }
 
+    // Get document details before deletion for notifications
+    const docsToDelete = documents.value.filter(doc => documentsToDelete.value.includes(doc.id));
+
     const deletePromises = documentsToDelete.value.map((id) =>
       pb.collection("Collection_1").delete(id)
     );
 
     await Promise.all(deletePromises);
+
+    // Dispatch delete events for each deleted document
+    docsToDelete.forEach(doc => {
+      const deleteEvent = new CustomEvent('orderDeleted', {
+        detail: {
+          orderNo: doc.orderNumber,
+          deletedBy: currentUser.value?.name || currentUser.value?.email || 'Unknown'
+        }
+      });
+      window.dispatchEvent(deleteEvent);
+    });
 
     documents.value = documents.value.filter(
       (doc) => !documentsToDelete.value.includes(doc.id)
@@ -2219,6 +2236,22 @@ const deleteDocument = async (doc: Document) => {
   } catch (error) {
     console.error("Error deleting document:", error);
   }
+};
+
+// Add this helper function near the top with other utility functions
+const calculateLapseDate = (deliveryDate: string | null): string | null => {
+  if (!deliveryDate) return null;
+  const date = new Date(deliveryDate);
+  date.setDate(date.getDate() + 5); // Add 5 days to delivery date
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "Asia/Manila",
+  });
 };
 </script>
 
@@ -2985,12 +3018,9 @@ const deleteDocument = async (doc: Document) => {
                   <p class="text-gray-500">Mode of Procurement:</p>
                   <p>{{ selectedOrder?.modeofProcurement || "Not set" }}</p>
                   <p class="text-gray-500">Delivery Date:</p>
-                  <p>
-                    {{
-                      formatDeliveryDateTime(selectedOrder?.deliveryDate) ||
-                      "Not set"
-                    }}
-                  </p>
+                  <p>{{ formatDeliveryDateTime(selectedOrder?.deliveryDate) || "Not set" }}</p>
+                  <p class="text-gray-500">Lapse Date:</p>
+                  <p>{{ calculateLapseDate(selectedOrder?.deliveryDate) || "Not set" }}</p>
                 </div>
               </div>
 
