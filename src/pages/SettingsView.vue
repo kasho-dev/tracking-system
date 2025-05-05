@@ -296,7 +296,7 @@ const updateBasicInfo = async () => {
             localStorage.removeItem('pocketbase_auth');
             sessionStorage.removeItem('pocketbase_auth');
             
-            // Also remove any remembered user data to force complete re-login
+            // Remove remembered user data to force complete re-login
             localStorage.removeItem('remembered_user');
             
             // Show success message that will be visible briefly before redirect
@@ -634,7 +634,7 @@ const updatePassword = async () => {
         localStorage.removeItem('pocketbase_auth');
         sessionStorage.removeItem('pocketbase_auth');
         
-        // Also remove any remembered user data to force complete re-login
+        // Remove remembered user data to force complete re-login
         localStorage.removeItem('remembered_user');
         
         // Redirect to login page after a short delay
@@ -693,8 +693,20 @@ const deleteAccount = async () => {
     if (!userId) return;
     
     await pb.collection('users').delete(userId);
+    
+    // Clear all authentication data
     pb.authStore.clear();
-    router.push('/login');
+    localStorage.removeItem('pocketbase_auth');
+    sessionStorage.removeItem('pocketbase_auth');
+    localStorage.removeItem('remembered_user');
+    
+    // Show brief success message
+    successMessage.value = 'Your account has been deleted successfully.';
+    
+    // Force redirect to login page after a short delay
+    setTimeout(() => {
+      window.location.replace('/login');
+    }, 1500);
   } catch (error) {
     console.error('Error deleting account:', error);
     errorMessage.value = 'Failed to delete account. Please try again.';

@@ -57,11 +57,12 @@ const closeDropdown = (event: MouseEvent) => {
 // Handle logout
 const handleLogout = async () => {
   try {
-    // Clear all auth data
+    // Clear auth data but preserve remembered user data
     pb.authStore.clear();
     localStorage.removeItem('pocketbase_auth');
     sessionStorage.removeItem('pocketbase_auth');
-    localStorage.removeItem('remembered_user');
+    // Don't remove remembered_user if it exists
+    // localStorage.removeItem('remembered_user');
     
     // Close dropdown
     isDropdownOpen.value = false;
