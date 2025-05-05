@@ -558,7 +558,7 @@ const loadMoreNotifications = () => {
                 </div>
                 
                 <!-- Notification Count -->
-                <div class="px-4 py-2 text-xs text-gray-500 text-right border-t border-gray-100">
+                <div class="px-4 py-2 text-xs text-gray-500 text-center border-t border-gray-100">
                   Showing {{ displayedNotificationsCount }} of {{ notifications.length }} notifications
                 </div>
                 
