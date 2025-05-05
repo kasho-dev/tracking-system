@@ -238,8 +238,16 @@ const verifyUserAccount = async () => {
     
     // Check if user still exists in database
     try {
-      await pb.collection('users').getOne(userId);
-      // User exists, continue as normal
+      const userData = await pb.collection('users').getOne(userId);
+      
+      // Check if user is verified
+      if (userData.verified === false) {
+        console.warn("Security alert: User account is not verified");
+        forceLogout("Your account has not been verified. Please verify your email address to continue.");
+        return;
+      }
+      
+      // User exists and is verified, continue as normal
     } catch (error: any) {
       // User not found in database or other error occurred
       if (error.status === 404) {

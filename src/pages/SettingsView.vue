@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick, watch } from 'vue';
+import { ref, onMounted, computed, nextTick, watch, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import PocketBase from 'pocketbase';
 
@@ -108,12 +108,20 @@ const passwordFieldsHaveValues = computed(() => {
          confirmPassword.value.trim() !== '';
 });
 
+// Add loading state
+const isLoadingUserData = ref(true);
+
 // Fetch user data
 const fetchUserData = async () => {
   try {
+    isLoadingUserData.value = true;
+    
     if (pb.authStore.isValid) {
       const userId = pb.authStore.model?.id;
-      if (!userId) return;
+      if (!userId) {
+        isLoadingUserData.value = false;
+        return;
+      }
       
       const userData = await pb.collection('users').getOne(userId);
       
@@ -139,6 +147,8 @@ const fetchUserData = async () => {
     }
   } catch (error) {
     console.error('Error fetching user data:', error);
+  } finally {
+    isLoadingUserData.value = false;
   }
 };
 
@@ -735,9 +745,13 @@ const handleFileSelect = (event: Event) => {
   }
 };
 
-// Enhanced onMounted with animations
-onMounted(() => {
-  fetchUserData();
+// Enhanced onMounted with animations and prioritized data loading
+onMounted(async () => {
+  // Fetch user data first
+  await fetchUserData();
+  
+  // Start security checks only after data is loaded
+  startSecurityChecks();
   
   // Trigger card entry animations
   setTimeout(() => {
@@ -748,12 +762,140 @@ onMounted(() => {
     cardEntryComplete.value = true;
   }, 800); // After all cards have entered
 });
+
+// Add onBeforeUnmount hook to clean up intervals
+onBeforeUnmount(() => {
+  stopSecurityChecks();
+});
+
+// Security check interval (in milliseconds)
+const SECURITY_CHECK_INTERVAL = 5000; // Check every 5 seconds
+let securityCheckInterval: number | null = null;
+
+// Force logout with a message
+const forceLogout = (message: string = "You have been logged out for security reasons.") => {
+  // Clear all auth data
+  pb.authStore.clear();
+  localStorage.removeItem('pocketbase_auth');
+  sessionStorage.removeItem('pocketbase_auth');
+  localStorage.removeItem('remembered_user');
+  
+  // Create a temporary element to show the message
+  const alertDiv = document.createElement('div');
+  alertDiv.style.position = 'fixed';
+  alertDiv.style.top = '20px';
+  alertDiv.style.left = '50%';
+  alertDiv.style.transform = 'translateX(-50%)';
+  alertDiv.style.backgroundColor = '#f56565';
+  alertDiv.style.color = 'white';
+  alertDiv.style.padding = '1rem';
+  alertDiv.style.borderRadius = '0.5rem';
+  alertDiv.style.zIndex = '9999';
+  alertDiv.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
+  alertDiv.textContent = message;
+  
+  document.body.appendChild(alertDiv);
+  
+  // Redirect to login page after brief delay
+  setTimeout(() => {
+    window.location.replace('/login');
+  }, 2000);
+};
+
+// Verify user account exists and is verified
+const verifyUserAccount = async () => {
+  try {
+    // Skip if not authenticated
+    if (!pb.authStore.isValid || !pb.authStore.model?.id) {
+      return;
+    }
+    
+    const userId = pb.authStore.model.id;
+    
+    // Check if user still exists in database
+    try {
+      const userData = await pb.collection('users').getOne(userId);
+      
+      // Check if user is verified
+      if (userData.verified === false) {
+        console.warn("Security alert: User account is not verified");
+        forceLogout("Your account has not been verified. Please verify your email address to continue.");
+        return;
+      }
+      
+      // User exists and is verified, continue as normal
+    } catch (error: any) {
+      // User not found in database or other error occurred
+      if (error.status === 404) {
+        console.warn("Security alert: User account no longer exists");
+        forceLogout("Your account could not be verified. Please log in again.");
+      } else if (error.status === 401 || error.status === 403) {
+        // Authentication or authorization error
+        console.warn("Security alert: Authentication error");
+        forceLogout("Your session has expired. Please log in again.");
+      }
+    }
+  } catch (error) {
+    console.error("Error during security check:", error);
+  }
+};
+
+// Verify token validity
+const verifyTokenValidity = () => {
+  // Check if token is expired or will expire soon
+  if (pb.authStore.isValid && pb.authStore.token) {
+    try {
+      const tokenData = JSON.parse(atob(pb.authStore.token.split('.')[1]));
+      const expirationTime = tokenData.exp * 1000; // Convert to milliseconds
+      const currentTime = Date.now();
+      
+      // If token is expired or will expire in the next minute
+      if (expirationTime < currentTime + 60000) {
+        console.warn("Security alert: Token expired or expiring soon");
+        forceLogout("Your session has expired. Please log in again.");
+      }
+    } catch (error) {
+      console.error("Error verifying token:", error);
+      // If we can't parse the token, force logout as a precaution
+      forceLogout("Session validation error. Please log in again.");
+    }
+  }
+};
+
+// Start security checks
+const startSecurityChecks = () => {
+  // Run checks immediately
+  verifyUserAccount();
+  verifyTokenValidity();
+  
+  // Set up interval for security checks
+  securityCheckInterval = window.setInterval(() => {
+    verifyUserAccount();
+    verifyTokenValidity();
+  }, SECURITY_CHECK_INTERVAL);
+};
+
+// Stop security checks
+const stopSecurityChecks = () => {
+  if (securityCheckInterval) {
+    clearInterval(securityCheckInterval);
+    securityCheckInterval = null;
+  }
+};
 </script>
 
 <template>
   <div
     class="min-h-screen animated-bg relative overflow-hidden p-4 md:p-6"
   >
+    <!-- Full page loading overlay -->
+    <div v-if="isLoadingUserData && !isPageLoaded" class="fixed inset-0 bg-[#0a0e1a] flex items-center justify-center z-50">
+      <div class="flex flex-col items-center">
+        <div class="loading-spinner mb-4"></div>
+        <div class="text-white text-lg">Loading user information...</div>
+      </div>
+    </div>
+    
     <div class="space-y-6 max-w-3xl mx-auto">
       <!-- Success notification for email change -->
       <div 
@@ -784,7 +926,46 @@ onMounted(() => {
       >
         <h2 class="text-xl font-bold mb-4">Basic Information</h2>
         
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Loading indicator for the entire card -->
+        <div v-if="isLoadingUserData" class="space-y-4">
+          <div class="animate-pulse flex flex-col space-y-4">
+            <!-- Profile photo skeleton -->
+            <div class="flex items-center space-x-4 col-span-full">
+              <div class="w-16 h-16 bg-gray-200 rounded-full"></div>
+              <div class="flex-1">
+                <div class="h-3 bg-gray-200 rounded w-1/3"></div>
+              </div>
+            </div>
+            
+            <!-- Name field skeleton -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div class="space-y-2">
+                <div class="h-3 bg-gray-200 rounded w-1/4"></div>
+                <div class="h-10 bg-gray-200 rounded w-full"></div>
+              </div>
+              
+              <!-- Email field skeleton -->
+              <div class="space-y-2">
+                <div class="h-3 bg-gray-200 rounded w-1/4"></div>
+                <div class="h-10 bg-gray-200 rounded w-full"></div>
+              </div>
+              
+              <!-- Department field skeleton -->
+              <div class="space-y-2">
+                <div class="h-3 bg-gray-200 rounded w-1/4"></div>
+                <div class="h-10 bg-gray-200 rounded w-full"></div>
+              </div>
+              
+              <!-- Role field skeleton -->
+              <div class="space-y-2">
+                <div class="h-3 bg-gray-200 rounded w-1/4"></div>
+                <div class="h-10 bg-gray-200 rounded w-full"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <!-- Profile Photo -->
           <div class="flex items-center space-x-4 col-span-full">
             <div class="relative cursor-pointer group" @click="triggerFileUpload">
@@ -1162,5 +1343,20 @@ onMounted(() => {
   background: linear-gradient(135deg, #0a0e1a, #1a1f36, #0a0e1a);
   background-size: 400% 400%;
   animation: gradientBG 20s ease infinite;
+}
+
+/* Loading spinner animation */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-spinner {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  border: 4px solid rgba(255, 255, 255, 0.1);
+  border-top-color: #6A5CFE;
+  animation: spin 1s ease-in-out infinite;
 }
 </style> 
