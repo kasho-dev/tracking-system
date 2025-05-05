@@ -4,7 +4,7 @@ import { Toolbar } from "primevue";
 import PocketBase from 'pocketbase';
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { User, Settings, LogOut, LayoutDashboard, Bell, Check, X, CheckCircle2, AlertTriangle, Clock, AlertCircle, CheckCircle, ArrowUpCircle, Trash } from 'lucide-vue-next';
+import { User, Settings, LogOut, LayoutDashboard, Bell, Check, X, CheckCircle2, AlertTriangle, Clock, AlertCircle, CheckCircle, ArrowUpCircle, Trash, File } from 'lucide-vue-next';
 
 const pb = new PocketBase('http://127.0.0.1:8090');
 const searchStore = useSearchStore();
@@ -57,12 +57,11 @@ const closeDropdown = (event: MouseEvent) => {
 // Handle logout
 const handleLogout = async () => {
   try {
-    // Clear auth data but preserve remembered user data
+    // Clear all auth data
     pb.authStore.clear();
     localStorage.removeItem('pocketbase_auth');
     sessionStorage.removeItem('pocketbase_auth');
-    // Don't remove remembered_user if it exists
-    // localStorage.removeItem('remembered_user');
+    localStorage.removeItem('remembered_user');
     
     // Close dropdown
     isDropdownOpen.value = false;
@@ -96,15 +95,40 @@ const notificationDisplayLimit = ref(20);
 const incrementNotificationsBy = 20;
 const isLoadingMoreNotifications = ref(false);
 
-// Add at the top of the script with other imports
-const deletedOrders = ref([{
-  id: 'deleted-test',
-  orderNo: 'TEST-2024',
-  deletedBy: 'Test User',
-  message: 'has been deleted.',
-  timestamp: new Date().toISOString(),
-  viewed: false
-}]);
+// Add event listener for new orders and deleted orders
+onMounted(() => {
+  // Listen for new order creation
+  window.addEventListener('orderCreated', ((event: CustomEvent) => {
+    const { orderNo, createdBy } = event.detail;
+    notifications.value.unshift({
+      id: `new-${Date.now()}`,
+      orderNo,
+      message: 'has been created and is pending review.',
+      timestamp: new Date().toISOString(),
+      createdBy,
+      isNew: true,
+      viewed: false
+    });
+    // Force notification update
+    updateNotifications();
+  }) as EventListener);
+
+  document.addEventListener('click', closeNotification, true);
+  document.addEventListener('click', closeDropdown);
+  updateNotifications();
+  // Poll every 30 seconds
+  notificationInterval = window.setInterval(updateNotifications, 30000);
+});
+
+onBeforeUnmount(() => {
+  // Remove new order listener
+  window.removeEventListener('orderCreated', (() => {}) as EventListener);
+  document.removeEventListener('click', closeNotification, true);
+  document.removeEventListener('click', closeDropdown);
+  if (notificationInterval) {
+    clearInterval(notificationInterval);
+  }
+});
 
 // Function to format notification message
 const formatNotificationMessage = (order: any) => {
@@ -163,59 +187,83 @@ const hasOrderBeenModified = (order: any) => {
   );
 };
 
-// Add event listener for deleted orders
-onMounted(() => {
-  window.addEventListener('orderDeleted', ((event: CustomEvent) => {
-    const { orderNo, deletedBy } = event.detail;
-    deletedOrders.value.unshift({
-      id: `deleted-${Date.now()}`,
-      orderNo,
-      deletedBy,
-      message: 'has been deleted.',
-      timestamp: new Date().toISOString(),
-      viewed: false
-    });
-    // Force notification update
-    updateNotifications();
-  }) as EventListener);
-});
-
-onBeforeUnmount(() => {
-  window.removeEventListener('orderDeleted', (() => {}) as EventListener);
-});
-
-// Update the notifications function to include deleted orders
+// Update the notifications function to include new orders
 const updateNotifications = async () => {
   try {
     const records = await pb.collection("Collection_1").getFullList({
-      sort: "-updated",
+      sort: "-updated",  // Get most recently updated records first
       expand: "verifiedBy,verificationEvents.userId,createdBy",
     });
 
-    const newNotifications = [
-      // Include deleted orders at the top
-      ...deletedOrders.value,
-      // Regular notifications
-      ...records.map(record => {
-        const message = formatNotificationMessage(record);
-        const isModified = hasOrderBeenModified(record);
-        
-        return {
+    // Create all notifications first
+    const allNotifications = [
+      // Include new orders (keep until status changes from Pending)
+      ...records
+        .filter(record => record.status === "Pending")
+        .map(record => ({
           id: record.id,
           orderNo: record.Order_No,
-          message,
-          isModified,
-          timestamp: record.updated,
-          viewed: record.viewed || false
-        };
-      }).filter(notification => notification.message)
+          message: 'has been created and is pending review.',
+          timestamp: record.created,
+          createdBy: record.createdByName || record.expand?.createdBy?.name || 'System',
+          isNew: true,
+          viewed: record.viewed || false,
+          status: record.status
+        })),
+      // Include deleted orders (keep until restored)
+      ...records
+        .filter(record => !record.visible && record.deletedDate)
+        .map(record => ({
+          id: record.id,
+          orderNo: record.Order_No,
+          message: 'has been deleted.',
+          timestamp: record.deletedDate,
+          deletedBy: record.deletedBy,
+          deletedDate: record.deletedDate,
+          deleted: true,
+          viewed: record.viewed || false,
+          status: 'Deleted'
+        })),
+      // Regular notifications (keep until status changes)
+      ...records
+        .filter(record => record.visible && record.status !== "Pending")
+        .map(record => {
+          const message = formatNotificationMessage(record);
+          const isModified = hasOrderBeenModified(record);
+          
+          return {
+            id: record.id,
+            orderNo: record.Order_No,
+            message,
+            isModified,
+            timestamp: record.updated,
+            viewed: record.viewed || false,
+            status: record.status,
+            // Track the last action for sorting
+            lastAction: record.updated || record.created
+          };
+        }).filter(notification => notification.message)
     ];
 
-    // Update unread count
-    unreadCount.value = newNotifications.filter(n => !n.viewed).length;
+    // Sort notifications by most recent action
+    const sortedNotifications = allNotifications.sort((a, b) => {
+      // Get the most recent timestamp for each notification
+      const getLatestTimestamp = (notification: any) => {
+        if (notification.deleted) return notification.deletedDate;
+        if (notification.isNew) return notification.timestamp;
+        return notification.lastAction || notification.timestamp;
+      };
+
+      const timeA = new Date(getLatestTimestamp(a)).getTime();
+      const timeB = new Date(getLatestTimestamp(b)).getTime();
+      return timeB - timeA;
+    });
+
+    // Update unread count (only count unviewed items)
+    unreadCount.value = sortedNotifications.filter(n => !n.viewed).length;
     
     // Update notifications
-    notifications.value = newNotifications;
+    notifications.value = sortedNotifications;
   } catch (error) {
     console.error("Error fetching notifications:", error);
   }
@@ -244,23 +292,19 @@ const toggleNotifications = () => {
   }
 };
 
-// Close notification dropdown when clicking outside
-const closeNotification = (event: MouseEvent) => {
-  const target = event.target as HTMLElement;
-  if (!target.closest('.notification-icon')) {
-    isNotificationOpen.value = false;
-    // Reset notification display limit when closing the dropdown
-    notificationDisplayLimit.value = 20;
-  }
-};
-
-// Add emits declaration at the top of the script
-const emit = defineEmits(['openModal']);
-
-// Update the handleNotificationClick function
+// Update the handleNotificationClick function to not close notifications
 const handleNotificationClick = async (notification: any) => {
-  if (deletedOrders.value.find(d => d.orderNo === notification.orderNo)) {
-    alert(`This order has been deleted by ${notification.deletedBy}. ${notification.orderNo} is no longer available.`);
+  if (notification.deleted) {
+    const deletedDate = new Date(notification.deletedDate).toLocaleString("en-US", {
+      timeZone: "Asia/Manila",
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+    alert(`${notification.orderNo} has been deleted by ${notification.deletedBy} on ${deletedDate} and is no longer available.`);
   } else {
     try {
       const order = await pb.collection("Collection_1").getFirstListItem(
@@ -271,6 +315,11 @@ const handleNotificationClick = async (notification: any) => {
       );
       
       if (order) {
+        // Only mark as viewed, but keep the notification until status changes
+        if (!order.viewed) {
+          await pb.collection("Collection_1").update(order.id, { viewed: true });
+        }
+
         const formattedOrder = {
           id: order.id,
           orderNumber: order.Order_No,
@@ -297,8 +346,28 @@ const handleNotificationClick = async (notification: any) => {
       alert('This order is no longer available');
     }
   }
-  isNotificationOpen.value = false;
 };
+
+// Update the closeNotification function to handle clicks properly
+const closeNotification = (event: MouseEvent) => {
+  const target = event.target as HTMLElement;
+  
+  // Don't close if clicking inside notification content or modals
+  if (target.closest('.notification-content') || 
+      target.closest('.modal') || 
+      target.closest('.p-dialog') || 
+      target.closest('.notification-icon')) {
+    return;
+  }
+  
+  // Only close if clicking outside
+  if (!target.closest('.notification-dropdown')) {
+    isNotificationOpen.value = false;
+  }
+};
+
+// Add emits declaration at the top of the script
+const emit = defineEmits(['openModal']);
 
 // Add new notification management functions
 const markAllAsRead = async () => {
@@ -322,27 +391,16 @@ const clearAllNotifications = () => {
 // Set up polling for notifications
 let notificationInterval: number | null = null;
 
-onMounted(() => {
-  document.addEventListener('click', closeDropdown);
-  document.addEventListener('click', closeNotification);
-  updateNotifications();
-  // Poll every 30 seconds
-  notificationInterval = window.setInterval(updateNotifications, 30000);
-});
-
-onBeforeUnmount(() => {
-  document.removeEventListener('click', closeDropdown);
-  document.removeEventListener('click', closeNotification);
-  if (notificationInterval) {
-    clearInterval(notificationInterval);
-  }
-});
-
-// Add time-based grouping functions
+// Update the time-based grouping functions to handle timezone
 const getTimeGroup = (timestamp: string) => {
   const now = new Date();
   const date = new Date(timestamp);
-  const diffTime = now.getTime() - date.getTime();
+  
+  // Convert both dates to Asia/Manila timezone for consistent comparison
+  const nowManila = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
+  const dateManila = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
+  
+  const diffTime = nowManila.getTime() - dateManila.getTime();
   const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
   
   if (diffDays === 0) return 'Today';
@@ -391,11 +449,16 @@ const displayedNotificationsCount = computed(() => {
   return count;
 });
 
-// Add function to format relative time
+// Update the relative time formatting to use Manila timezone
 const getRelativeTime = (timestamp: string) => {
   const now = new Date();
   const date = new Date(timestamp);
-  const diffTime = now.getTime() - date.getTime();
+  
+  // Convert both dates to Asia/Manila timezone
+  const nowManila = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
+  const dateManila = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
+  
+  const diffTime = nowManila.getTime() - dateManila.getTime();
   const diffMinutes = Math.floor(diffTime / (1000 * 60));
   const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
   const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
@@ -406,11 +469,25 @@ const getRelativeTime = (timestamp: string) => {
   if (diffHours < 24) return `${diffHours}h`;
   if (diffDays < 7) return `${diffDays}d`;
   if (diffWeeks < 4) return `${diffWeeks}w`;
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  
+  // For older dates, show the actual date in Manila time
+  return dateManila.toLocaleDateString('en-US', { 
+    month: 'short', 
+    day: 'numeric',
+    timeZone: 'Asia/Manila'
+  });
 };
 
-// Update the getNotificationIcon function
+// Update the getNotificationIcon function to include new order icon
 const getNotificationIcon = (notification: any) => {
+  // Check if it's a new order notification
+  if (notification.isNew) {
+    return {
+      component: File,
+      class: 'text-green-500'
+    };
+  }
+
   // Check if it's a deleted notification
   if (notification.message.includes('deleted')) {
     return {
@@ -507,15 +584,15 @@ const loadMoreNotifications = () => {
           >
             <div 
               v-if="isNotificationOpen"
-              class="absolute right-0 top-full mt-2 w-96 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200 max-h-96 overflow-y-auto"
+              class="notification-dropdown absolute right-0 top-full mt-2 w-96 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200 max-h-96 overflow-y-auto"
             >
               <!-- Notification Header -->
-              <div class="px-4 py-3 border-b border-gray-100">
+              <div class="notification-content px-4 py-3 border-b border-gray-100">
                 <span class="text-base font-semibold text-gray-900">Notifications</span>
               </div>
 
               <!-- Notifications List -->
-              <div v-if="notifications.length > 0">
+              <div v-if="notifications.length > 0" class="notification-content">
                 <div v-for="(groupNotifications, groupName) in groupedNotifications" :key="groupName">
                   <!-- Time Group Header -->
                   <div class="px-4 py-2 bg-gray-50">
@@ -526,7 +603,7 @@ const loadMoreNotifications = () => {
                   <div 
                     v-for="notification in groupNotifications" 
                     :key="notification.id" 
-                    class="px-4 py-3 hover:bg-gray-50 cursor-pointer group"
+                    class="notification-content px-4 py-3 hover:bg-gray-50 cursor-pointer group"
                     @click="handleNotificationClick(notification)"
                   >
                     <div class="flex items-start gap-3">
@@ -583,7 +660,7 @@ const loadMoreNotifications = () => {
                   </button>
                 </div>
               </div>
-              <div v-else class="px-4 py-3 text-xs text-gray-500 text-center">
+              <div v-else class="notification-content px-4 py-3 text-xs text-gray-500 text-center">
                 No notifications
               </div>
             </div>

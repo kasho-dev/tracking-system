@@ -231,156 +231,6 @@ const poNumberCharCount = computed(() => poNumber.value.length);
 // Linked Pocketbase
 const pb = new PocketBase("http://127.0.0.1:8090");
 
-// Security check interval (in milliseconds)
-const SECURITY_CHECK_INTERVAL = 5000; // Check every 60 seconds
-let securityCheckInterval: number | null = null;
-
-// Add this function to periodically verify user account exists
-const verifyUserAccount = async () => {
-  try {
-    // Skip if not authenticated
-    if (!pb.authStore.isValid || !pb.authStore.model?.id) {
-      return;
-    }
-    
-    const userId = pb.authStore.model.id;
-    
-    // Check if user still exists in database
-    try {
-      const userData = await pb.collection('users').getOne(userId);
-      
-      // Check if user is verified
-      if (userData.verified === false) {
-        console.warn("Security alert: User account is not verified");
-        forceLogout("Your account has not been verified. Please verify your email address to continue.");
-        return;
-      }
-      
-      // User exists and is verified, continue as normal
-    } catch (error: any) {
-      // User not found in database or other error occurred
-      if (error.status === 404) {
-        console.warn("Security alert: User account no longer exists");
-        forceLogout("Your account could not be verified. Please log in again.");
-      } else if (error.status === 401 || error.status === 403) {
-        // Authentication or authorization error
-        console.warn("Security alert: Authentication error");
-        forceLogout("Your session has expired. Please log in again.");
-      }
-    }
-  } catch (error) {
-    console.error("Error during security check:", error);
-  }
-};
-
-// Force logout with a message
-const forceLogout = (message: string = "You have been logged out for security reasons.") => {
-  // Clear all auth data
-  pb.authStore.clear();
-  localStorage.removeItem('pocketbase_auth');
-  sessionStorage.removeItem('pocketbase_auth');
-  localStorage.removeItem('remembered_user');
-  
-  // Create a temporary element to show the message
-  const alertDiv = document.createElement('div');
-  alertDiv.style.position = 'fixed';
-  alertDiv.style.top = '20px';
-  alertDiv.style.left = '50%';
-  alertDiv.style.transform = 'translateX(-50%)';
-  alertDiv.style.backgroundColor = '#f56565';
-  alertDiv.style.color = 'white';
-  alertDiv.style.padding = '1rem';
-  alertDiv.style.borderRadius = '0.5rem';
-  alertDiv.style.zIndex = '9999';
-  alertDiv.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
-  alertDiv.textContent = message;
-  
-  document.body.appendChild(alertDiv);
-  
-  // Redirect to login page after brief delay
-  setTimeout(() => {
-    window.location.replace('/login');
-  }, 2000);
-};
-
-// Additional security check: verify token validity
-const verifyTokenValidity = () => {
-  // Check if token is expired or will expire soon
-  if (pb.authStore.isValid && pb.authStore.token) {
-    try {
-      const tokenData = JSON.parse(atob(pb.authStore.token.split('.')[1]));
-      const expirationTime = tokenData.exp * 1000; // Convert to milliseconds
-      const currentTime = Date.now();
-      
-      // If token is expired or will expire in the next minute
-      if (expirationTime < currentTime + 60000) {
-        console.warn("Security alert: Token expired or expiring soon");
-        forceLogout("Your session has expired. Please log in again.");
-      }
-    } catch (error) {
-      console.error("Error verifying token:", error);
-      // If we can't parse the token, force logout as a precaution
-      forceLogout("Session validation error. Please log in again.");
-    }
-  }
-};
-
-// Efficient polling with automatic security checks
-const startPolling = () => {
-  // Fetch documents immediately
-  fetchDocuments();
-  
-  // If overlay is open, fetch selected order too
-  if (isOverlayOpen.value) {
-    fetchSelectedOrder();
-  }
-  
-  // Run security checks immediately
-  verifyUserAccount();
-  verifyTokenValidity();
-  
-  // Set up interval for security checks
-  securityCheckInterval = window.setInterval(() => {
-    verifyUserAccount();
-    verifyTokenValidity();
-    fetchDocuments();
-    if (isOverlayOpen.value) {
-      fetchSelectedOrder();
-    }
-  }, SECURITY_CHECK_INTERVAL);
-};
-
-// Stop polling and security checks when component is unmounted
-const stopPolling = () => {
-  if (securityCheckInterval) {
-    clearInterval(securityCheckInterval);
-    securityCheckInterval = null;
-  }
-};
-
-// Add automatic reloading on focus
-const setupFocusHandlers = () => {
-  // Refresh data when window regains focus (user returns to tab)
-  window.addEventListener('focus', () => {
-    fetchDocuments();
-    verifyUserAccount();
-    verifyTokenValidity();
-  });
-};
-
-// Update onMounted and onUnmounted hooks
-onMounted(async () => {
-  await fetchDocuments();
-  fetchCurrentUser();
-  startPolling();
-  setupFocusHandlers();
-});
-
-onUnmounted(() => {
-  stopPolling();
-  window.removeEventListener('focus', () => {});
-});
-
 const searchStore = useSearchStore(); // ✅ Initialize store
 
 // Refresh Table Every Second
@@ -489,6 +339,24 @@ const fetchSelectedOrder = async () => {
   } catch (error) {
     console.error("Error refreshing selected order:", error);
   }
+};
+
+const startPolling = () => {
+  // Fetch documents immediately
+  fetchDocuments();
+
+  // If overlay is open, fetch selected order too
+  if (isOverlayOpen.value) {
+    fetchSelectedOrder();
+  }
+
+  // Set up interval for every second
+  // refreshInterval.value = setInterval(() => {
+  //   fetchDocuments();
+  //   if (isOverlayOpen.value) {
+  //     fetchSelectedOrder();
+  //   }
+  // }, 1000);
 };
 
 // const stopPolling = () => {
@@ -1224,7 +1092,7 @@ const closeModalAdd = () => {
 const fetchDocuments = async () => {
   try {
     const records = await pb.collection("Collection_1").getFullList({
-      // Sort by last modified timestamp so latest updates appear first
+      filter: 'visible = true',  // Only get visible documents
       sort: "-updated",
       expand:
         "verifiedAt,completedAt,updated,verifiedBy,verificationEvents.userId,createdBy",
@@ -1566,7 +1434,17 @@ const submitPO = async () => {
         trackingId: `seq${Math.floor(Math.random() * 1000000)}`,
         handledBy: creatorName,
         status: "Pending",
+        visible: true  // Set visible to true by default
       });
+
+      // Dispatch event for new order creation
+      const createEvent = new CustomEvent('orderCreated', {
+        detail: {
+          orderNo: record.Order_No,
+          createdBy: creatorName
+        }
+      });
+      window.dispatchEvent(createEvent);
 
       // Format the delivery date using the same function used in the overlay
       const formattedPhDate = formatDeliveryDateTime(formattedDeliveryDate);
@@ -1897,11 +1775,14 @@ const deleteSelectedDocuments = async () => {
     // Get document details before deletion for notifications
     const docsToDelete = documents.value.filter(doc => documentsToDelete.value.includes(doc.id));
 
-    const deletePromises = documentsToDelete.value.map((id) =>
-      pb.collection("Collection_1").delete(id)
-    );
-
-    await Promise.all(deletePromises);
+    // Update each document sequentially for better reliability
+    for (const id of documentsToDelete.value) {
+      await pb.collection("Collection_1").update(id, {
+        "visible": false,
+        "deletedDate": new Date().toISOString(),
+        "deletedBy": currentUser.value?.name || currentUser.value?.email || 'Unknown'
+      });
+    }
 
     // Dispatch delete events for each deleted document
     docsToDelete.forEach(doc => {
@@ -1914,6 +1795,7 @@ const deleteSelectedDocuments = async () => {
       window.dispatchEvent(deleteEvent);
     });
 
+    // Remove from local display
     documents.value = documents.value.filter(
       (doc) => !documentsToDelete.value.includes(doc.id)
     );
@@ -2108,9 +1990,11 @@ const fetchCurrentUser = async () => {
     await pb.collection("users").authRefresh();
     currentUser.value = pb.authStore.model;
 
-    // Ensure role exists, default to 'user' if not set
+    // Ensure role exists and is properly set
     if (!currentUser.value?.role) {
-      currentUser.value = { ...currentUser.value, role: "user" };
+      // Get the user's data directly from the database to ensure we have the correct role
+      const userData = await pb.collection("users").getOne(currentUser.value.id);
+      currentUser.value = { ...currentUser.value, role: userData.role || "user" };
     }
 
     console.log("Current user role:", currentUser.value?.role);
@@ -2119,6 +2003,16 @@ const fetchCurrentUser = async () => {
     currentUser.value = null;
   }
 };
+
+onMounted(async () => {
+  await fetchDocuments();
+  fetchCurrentUser();
+  startPolling();
+});
+
+// onUnmounted(() => {
+//   stopPolling();
+// });
 
 // Add a standardized date comparison function
 const areDatesEqual = (
@@ -2214,16 +2108,32 @@ const clearDeliveryDateError = () => {
 // Update the deleteDocument function
 const deleteDocument = async (doc: Document) => {
   try {
+    if (!currentUser.value) {
+      alert("You must be logged in to delete documents.");
+      return;
+    }
+
+    if (currentUser.value.role !== "admin") {
+      alert("You don't have permission to delete documents.");
+      return;
+    }
+
     if (confirm("Are you sure you want to delete this document?")) {
-      // Delete the document
-      await pb.collection("Collection_1").delete(doc.id);
+      // Update the document with visible = false
+      await pb.collection("Collection_1").update(doc.id, {
+        "visible": false,
+        "deletedDate": new Date().toISOString(),
+        "deletedBy": currentUser.value?.name || currentUser.value?.email || 'Unknown'
+      });
+      
+      // Remove from local display
       documents.value = documents.value.filter((d) => d.id !== doc.id);
       
       // Dispatch delete event
       const deleteEvent = new CustomEvent('orderDeleted', {
         detail: {
           orderNo: doc.orderNumber,
-          deletedBy: pb.authStore.model?.name || pb.authStore.model?.email || 'Unknown User'
+          deletedBy: currentUser.value?.name || currentUser.value?.email || 'Unknown'
         }
       });
       window.dispatchEvent(deleteEvent);
@@ -2235,6 +2145,7 @@ const deleteDocument = async (doc: Document) => {
     }
   } catch (error) {
     console.error("Error deleting document:", error);
+    alert("Failed to delete document. Please try again.");
   }
 };
 
