@@ -669,10 +669,18 @@ const loadMoreNotifications = () => {
 
         <!-- Search Input - Hidden on settings page -->
         <div v-if="showSearch" class="relative mt-3 group">
+          <!-- Hidden dummy fields to catch autofill attempts -->
+          <div style="display:none">
+            <input type="text" name="prevent_autofill" />
+            <input type="password" name="password_fake" />
+          </div>
           <input
             v-model="searchStore.searchQuery"
             type="text"
             placeholder="Search..."
+            autocomplete="new-password"
+            data-1p-ignore="true"
+            name="search_no_autofill"
             class="bg-gray-100 text-black px-3 py-2 rounded-lg w-64 focus:outline-none pr-10 placeholder:opacity-100 placeholder:transition-all placeholder:duration-300 group-hover:placeholder:opacity-100 group-hover:placeholder:translate-x-2"
           />
           <span class="absolute right-3 top-2 text-gray-500">

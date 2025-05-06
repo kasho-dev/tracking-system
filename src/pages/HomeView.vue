@@ -124,19 +124,16 @@ const getDeliveryWarning = (doc: Document) => {
   // Calculate days after delivery date
   const daysAfterDelivery = (now.getTime() - deliveryDate.getTime()) / (1000 * 60 * 60 * 24);
   
-  // Show "Due Today" if:
-  // 1. Within 24 hours before delivery date OR
-  // 2. After delivery date but before lapsing (5 days)
-  if ((diffHours <= 24 && diffHours > -120) || // -120 hours = 5 days
-      (daysAfterDelivery > 0 && daysAfterDelivery < 5)) {
+  // Show "Due Today" only AFTER delivery date but BEFORE lapsing (5 days)
+  if (daysAfterDelivery > 0 && daysAfterDelivery < 5) {
     return {
       text: 'Due Today',
       color: 'bg-red-100 text-red-800'
     };
   }
   
-  // Show "Almost Due" if more than 24 hours but within 3 days before delivery
-  if (diffHours > 24 && diffHours <= 72) {
+  // Show "Almost Due" if within 3 days before delivery date
+  if (diffHours > 0 && diffHours <= 72) {
     return {
       text: 'Almost Due',
       color: 'bg-yellow-100 text-yellow-800'
@@ -2289,6 +2286,8 @@ watch(() => searchStore.searchQuery, () => {
                       type="text"
                       placeholder="eg. APO2025-2024"
                       maxlength="50"
+                      autocomplete="off"
+                      name="po_number"
                       required
                       class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       :class="{ 'border-red-500': showPONumberError }"
@@ -2319,6 +2318,8 @@ watch(() => searchStore.searchQuery, () => {
                       v-model="supplierName"
                       type="text"
                       placeholder="John Pork"
+                      autocomplete="off"
+                      name="supplier_name"
                       required
                       class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       :class="{ 'border-red-500': showSupplierError }"
@@ -2341,6 +2342,8 @@ watch(() => searchStore.searchQuery, () => {
                       v-model="address"
                       type="text"
                       placeholder="Legazpi City, Albay"
+                      autocomplete="off"
+                      name="address"
                       class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       :class="{ 'border-red-500': showAddressError }"
                       @input="clearAddressError"
@@ -2362,6 +2365,8 @@ watch(() => searchStore.searchQuery, () => {
                       v-model="tin_ID"
                       type="text"
                       placeholder="716-412-421 VAT"
+                      autocomplete="off"
+                      name="tin_id"
                       class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       :class="{ 'border-red-500': showTinError }"
                       @input="clearTinError"
@@ -2385,6 +2390,8 @@ watch(() => searchStore.searchQuery, () => {
                       v-model="modeofProcurement"
                       type="text"
                       placeholder="Small Value Procurement"
+                      autocomplete="off"
+                      name="procurement_mode"
                       class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       :class="{ 'border-red-500': showProcurementError }"
                       @input="clearProcurementError"
@@ -2409,6 +2416,8 @@ watch(() => searchStore.searchQuery, () => {
                       v-model="deliveryDate"
                       type="datetime-local"
                       :min="minDeliveryDate"
+                      autocomplete="off"
+                      name="delivery_date"
                       class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert"
                       :class="{
                         'border-red-500': showDeliveryDateError || dateError,
