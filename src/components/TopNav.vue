@@ -4,7 +4,7 @@ import { Toolbar } from "primevue";
 import PocketBase from 'pocketbase';
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { User, Settings, LogOut, LayoutDashboard, Bell, Check, X, CheckCircle2, AlertTriangle, Clock, AlertCircle, CheckCircle, ArrowUpCircle, Trash, File, FileEdit } from 'lucide-vue-next';
+import { User, Settings, LogOut, LayoutDashboard, Bell, Check, X, CheckCircle2, AlertTriangle, Clock, AlertCircle, CheckCircle, ArrowUpCircle, Trash, File, FileEdit, FilePlus2, CircleCheckBig } from 'lucide-vue-next';
 
 const pb = new PocketBase('http://127.0.0.1:8090');
 const searchStore = useSearchStore();
@@ -106,95 +106,77 @@ const triggerCounterAnimation = () => {
   }, 300); // Animation duration
 };
 
-// Add this computed property to control counter visibility
-const showNotificationCounter = computed(() => {
-  return unreadCount.value > 0 && !isNotificationOpen.value;
-});
+// Add a ref to store the interval
+const notificationIntervalRef = ref<ReturnType<typeof setInterval> | null>(null);
 
-// Update the subscription handler to consider dropdown state
-onMounted(() => {
-  // TEMPORARY TEST NOTIFICATIONS - TO BE REMOVED
-  notifications.value = [
-    {
-      id: 'test1',
-      orderNo: 'APO-001',
-      message: 'has been created and is pending review.',
-      timestamp: new Date().toISOString(),
-      isNew: true,
-      viewed: false,
-      status: 'Pending'
-    },
-    {
-      id: 'test2',
-      orderNo: 'APO-002',
-      message: 'needs action.',
-      timestamp: new Date().toISOString(),
-      viewed: false,
-      status: 'Needs Action'
-    },
-    {
-      id: 'test3',
-      orderNo: 'APO-003',
-      message: 'has been edited.',
-      timestamp: new Date().toISOString(),
-      viewed: false,
-      status: 'Pending'
-    },
-    {
-      id: 'test4',
-      orderNo: 'APO-004',
-      message: 'has been verified.',
-      timestamp: new Date().toISOString(),
-      viewed: false,
-      status: 'Verified'
-    },
-    {
-      id: 'test5',
-      orderNo: 'APO-005',
-      message: 'has been completed and verified.',
-      timestamp: new Date().toISOString(),
-      viewed: false,
-      status: 'Completed'
-    },
-    {
-      id: 'test6',
-      orderNo: 'APO-006',
-      message: 'has lapsed.',
-      timestamp: new Date().toISOString(),
-      viewed: false,
-      status: 'Lapsed'
-    },
-    {
-      id: 'test7',
-      orderNo: 'APO-007',
-      message: 'will fully lapse in 2 days.',
-      timestamp: new Date().toISOString(),
-      viewed: false,
-      status: 'Pending'
-    },
-    {
-      id: 'test8',
-      orderNo: 'APO-008',
-      message: 'has been extended.',
-      timestamp: new Date().toISOString(),
-      viewed: false,
-      status: 'Extended'
-    },
-    {
-      id: 'test9',
-      orderNo: 'APO-009',
-      message: 'has been deleted.',
-      timestamp: new Date().toISOString(),
-      viewed: false,
-      status: 'Deleted',
-      deleted: true,
-      deletedBy: 'Admin User',
-      deletedDate: new Date().toISOString()
+// Add a ref to track completed documents that should be preserved
+const preservedCompletedDocuments = ref<Map<string, any>>(new Map());
+
+// Add a local notification counter that persists in session storage
+const localNotificationCounter = ref(0);
+const sessionProcessedIds = ref<Set<string>>(new Set());
+
+// Function to save processed IDs to session storage
+const saveProcessedIds = () => {
+  if (typeof sessionStorage !== 'undefined') {
+    sessionStorage.setItem('processedNotificationIds', JSON.stringify([...sessionProcessedIds.value]));
+  }
+};
+
+// Function to load processed IDs from session storage
+const loadProcessedIds = () => {
+  if (typeof sessionStorage !== 'undefined') {
+    const savedIds = sessionStorage.getItem('processedNotificationIds');
+    if (savedIds) {
+      try {
+        sessionProcessedIds.value = new Set(JSON.parse(savedIds));
+      } catch (error) {
+        console.error('Error parsing processed notification IDs:', error);
+      }
     }
-  ];
+  }
+};
 
-  // Set unread count
-  unreadCount.value = notifications.value.length;
+// Function to increment local notification counter and save to session storage
+const incrementLocalCounter = (id: string, timestamp: string) => {
+  // Create a unique identifier using ID and timestamp to track updates
+  const changeId = `${id}_${timestamp}`;
+  
+  // Only increment if we haven't processed this specific change yet
+  if (!sessionProcessedIds.value.has(changeId)) {
+    localNotificationCounter.value++;
+    sessionProcessedIds.value.add(changeId);
+    saveProcessedIds();
+    
+    // Save counter to session storage
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem('notificationCounter', localNotificationCounter.value.toString());
+    }
+    
+    // Trigger animation for visual feedback
+    triggerCounterAnimation();
+  }
+};
+
+// Reset the local counter (called when opening notifications)
+const resetLocalCounter = () => {
+  localNotificationCounter.value = 0;
+  if (typeof sessionStorage !== 'undefined') {
+    sessionStorage.setItem('notificationCounter', '0');
+  }
+};
+
+onMounted(() => {
+  // Load local counter from session storage
+  if (typeof sessionStorage !== 'undefined') {
+    const savedCounter = sessionStorage.getItem('notificationCounter');
+    if (savedCounter) {
+      localNotificationCounter.value = parseInt(savedCounter, 10) || 0;
+    }
+  }
+  
+  // Load processed notification IDs
+  loadProcessedIds();
 
   // Subscribe to real-time updates for Collection_1
   pb.collection('Collection_1').subscribe('*', async (e) => {
@@ -214,46 +196,86 @@ onMounted(() => {
         viewed: false,
         status: record.status
       });
+      
+      // Increment local counter for new document
+      incrementLocalCounter(record.id, record.created);
       shouldUpdateCounter = !isNotificationOpen.value;
     } else if (e.action === 'update') {
       // Document updated - check for status changes, etc.
       const existingNotificationIndex = notifications.value.findIndex(n => n.id === record.id);
-      const oldNotification = notifications.value[existingNotificationIndex];
       
       if (existingNotificationIndex !== -1) {
-        const message = formatNotificationMessage(record);
-        if (message) {
+        const message = formatNotificationMessageWithEvent(record);
+        
+        // Special handling for completed documents - don't update position
+        if (record.status === 'Completed' && notifications.value[existingNotificationIndex].status === 'Completed') {
+          // Only update message and verification events, preserve position
+          notifications.value[existingNotificationIndex] = {
+            ...notifications.value[existingNotificationIndex],
+            message,
+            verificationEventCount: record.verificationEvents?.length || 0,
+            lastVerificationEventId: record.verificationEvents?.length > 0 ? 
+              record.verificationEvents[record.verificationEvents.length - 1].timestamp : null,
+            preservePosition: true
+          };
+          
+          // Store for preservation
+          preservedCompletedDocuments.value.set(record.id, notifications.value[existingNotificationIndex]);
+        } else if (message) {
+          // Regular update for non-completed documents
           notifications.value[existingNotificationIndex] = {
             id: record.id,
             orderNo: record.Order_No,
             message,
             isModified: hasOrderBeenModified(record),
             timestamp: record.updated,
-            viewed: isNotificationOpen.value, // Mark as viewed if dropdown is open
+            viewed: false, // Always mark updates as unviewed to keep "new" indicator
             status: record.status,
-            lastAction: record.updated || record.created
+            lastAction: record.updated || record.created,
+            verificationEventCount: record.verificationEvents?.length || 0,
+            lastVerificationEventId: record.verificationEvents?.length > 0 ? 
+              record.verificationEvents[record.verificationEvents.length - 1].timestamp : null,
+            completedAt: record.completedAt,
+            preservePosition: false
           };
+          
+          // Increment local counter for updated document
+          incrementLocalCounter(record.id, record.updated);
           shouldUpdateCounter = !isNotificationOpen.value;
         }
       }
     } else if (e.action === 'delete') {
       // Document deleted
       notifications.value = notifications.value.filter(n => n.id !== record.id);
+      // Remove from preserved documents
+      preservedCompletedDocuments.value.delete(record.id);
       shouldUpdateCounter = !isNotificationOpen.value;
     }
     
-    // Update unread count and trigger animation if needed
+    // Update unread count (only count unviewed items)
     if (shouldUpdateCounter) {
       unreadCount.value = notifications.value.filter(n => !n.viewed).length;
-      triggerCounterAnimation();
     }
   });
 
   document.addEventListener('click', closeNotification, true);
   document.addEventListener('click', closeDropdown);
   
-  // Comment out the initial fetch since we're using test data
-  // updateNotifications();
+  // Initial fetch of notifications
+  updateNotifications();
+  
+  // Set up interval for periodic updates (every 2-3 seconds)
+  // Clear any existing interval first to prevent duplicates
+  if (notificationIntervalRef.value) {
+    clearInterval(notificationIntervalRef.value);
+  }
+  
+  const notificationInterval = setInterval(() => {
+    updateNotifications();
+  }, 2500);
+  
+  // Store the interval so we can clear it in onBeforeUnmount
+  notificationIntervalRef.value = notificationInterval;
 });
 
 onBeforeUnmount(() => {
@@ -261,24 +283,66 @@ onBeforeUnmount(() => {
   pb.collection('Collection_1').unsubscribe();
   document.removeEventListener('click', closeNotification, true);
   document.removeEventListener('click', closeDropdown);
+  
+  // Clear the notification interval if it exists
+  if (notificationIntervalRef.value) {
+    clearInterval(notificationIntervalRef.value);
+    notificationIntervalRef.value = null;
+  }
 });
 
-// Function to format notification message
-const formatNotificationMessage = (order: any) => {
-  if (order.deleted) {
+// Function to get the latest verification event
+const getLatestVerificationEvent = (record: any) => {
+  if (!record.verificationEvents || record.verificationEvents.length === 0) {
+    return null;
+  }
+  
+  // Sort events by timestamp descending and get the first one
+  return [...record.verificationEvents].sort((a, b) => {
+    const timeA = new Date(a.timestamp).getTime();
+    const timeB = new Date(b.timestamp).getTime();
+    return timeB - timeA;
+  })[0];
+};
+
+// Function to format notification message based on latest verification event
+const formatNotificationMessageWithEvent = (record: any) => {
+  if (record.deleted) {
     return 'has been deleted.';
   }
 
-  // Check for edit events first
-  const hasEditEvent = order.verificationEvents?.some((event: any) => 
-    event.type === 'modify' || event.type === 'edit'
-  );
-  if (hasEditEvent) {
+  // Get the latest verification event
+  const latestEvent = getLatestVerificationEvent(record);
+  
+  // If we have a verification event, use it to determine the message
+  if (latestEvent) {
+    switch (latestEvent.type) {
+      case 'initial':
+        return 'has received initial verification.';
+      case 'sent to supplier':
+        return 'has been verified and sent to the supplier.';
+      case 'final':
+        return 'has been completed and verified.';
+      case 'undo':
+        return latestEvent.action || 'verification was cancelled.';
+      case 'lapsed':
+        return 'has lapsed.';
+      case 'extend':
+        return 'has been extended.';
+      case 'edit':
     return 'has been edited.';
+      case 'modify':
+        return 'has been modified.';
+      case 'delete':
+        return 'has been deleted.';
+      default:
+        break;
+    }
   }
 
-  const status = order.status;
-  const deliveryDate = order.deliveryDate ? new Date(order.deliveryDate) : null;
+  // If no specific event matches or no events exist, use status-based messages
+  const status = record.status;
+  const deliveryDate = record.deliveryDate ? new Date(record.deliveryDate) : null;
   const now = new Date();
   
   // Calculate time differences if delivery date exists
@@ -313,7 +377,7 @@ const formatNotificationMessage = (order: any) => {
   } else if (status === 'Extended') {
     return 'has been extended.';
   } else if (status === 'Verified') {
-    return 'has been verified.';
+    return 'has been verified and sent to the supplier.';
   } else if (status === 'Pending') {
     return 'is pending.';
   }
@@ -321,14 +385,69 @@ const formatNotificationMessage = (order: any) => {
   return 'status has been updated.';
 };
 
-// Function to check if order has been modified
-const hasOrderBeenModified = (order: any) => {
-  return order.verificationEvents?.some((event: any) => 
-    event.type === 'modify' || event.type === 'undo'
-  );
+// Add this function to get the time group for a notification to group by time
+const getTimeGroup = (timestamp: string) => {
+  const now = new Date();
+  const date = new Date(timestamp);
+  
+  // Convert both dates to Asia/Manila timezone for consistent comparison
+  const nowManila = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
+  const dateManila = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
+  
+  const diffTime = nowManila.getTime() - dateManila.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays <= 7) return 'This Week';
+  if (diffDays <= 30) return 'This Month';
+  return 'Last Month';
 };
 
-// Update the notifications function to include new orders
+// Update the sorting logic to maintain positions of completed documents
+const preserveExistingPositions = () => {
+  // Create a map of existing notifications with their indices and timestamps
+  const existingOrder = new Map();
+  const existingTimestamps = new Map();
+  
+  notifications.value.forEach((notification, index) => {
+    existingOrder.set(notification.id, index);
+    existingTimestamps.set(notification.id, notification.timestamp);
+  });
+  
+  // Return a sort function that preserves timestamps and positions
+  return (a: any, b: any) => {
+    // First sort by time group (Today, Yesterday, etc.)
+    const groupA = getTimeGroup(a.timestamp);
+    const groupB = getTimeGroup(b.timestamp);
+    
+    if (groupA !== groupB) {
+      // Different time groups, sort by group
+      const groups = ['Today', 'Yesterday', 'This Week', 'This Month', 'Last Month'];
+      return groups.indexOf(groupA) - groups.indexOf(groupB);
+    }
+    
+    // Same time group - preserve the original timestamps for completed items
+    const aIsPreserved = a.status === 'Completed' && existingOrder.has(a.id);
+    const bIsPreserved = b.status === 'Completed' && existingOrder.has(b.id);
+    
+    // When a document is newly completed, keep its original timestamp
+    if (a.isNewlyCompleted && existingTimestamps.has(a.id)) {
+      a.timestamp = existingTimestamps.get(a.id);
+    }
+    
+    if (b.isNewlyCompleted && existingTimestamps.has(b.id)) {
+      b.timestamp = existingTimestamps.get(b.id);
+    }
+    
+    // Within the same time group, sort by timestamp
+    const timeA = new Date(a.timestamp).getTime();
+    const timeB = new Date(b.timestamp).getTime();
+    return timeB - timeA;
+  };
+};
+
+// Update notification function to track original timestamp
 const updateNotifications = async () => {
   try {
     const records = await pb.collection("Collection_1").getFullList({
@@ -336,104 +455,212 @@ const updateNotifications = async () => {
       expand: "verifiedBy,verificationEvents.userId,createdBy",
     });
 
+    // Get existing notification IDs for comparison
+    const existingNotifications = new Map();
+    const originalTimestamps = new Map();
+    
+    notifications.value.forEach(n => {
+      existingNotifications.set(n.id, n);
+      originalTimestamps.set(n.id, n.timestamp);  // Store original timestamps
+    });
+    
+    // Update preserved completed documents
+    notifications.value.forEach(notification => {
+      if (notification.status === 'Completed' && notification.completedAt) {
+        preservedCompletedDocuments.value.set(notification.id, notification);
+      }
+    });
+    
+    let hasNewItems = false;
+
     // Create all notifications first
     const allNotifications = [
       // Include new orders (keep until status changes from Pending)
       ...records
-        .filter(record => record.status === "Pending")
-        .map(record => ({
+        .filter(record => record.status === "Pending" && !record.completedAt)
+        .map(record => {
+          // Check if this is a new notification
+          if (!existingNotifications.has(record.id)) {
+            incrementLocalCounter(record.id, record.created);
+            hasNewItems = true;
+          }
+          
+          return {
           id: record.id,
           orderNo: record.Order_No,
           message: 'has been created and is pending review.',
           timestamp: record.created,
           createdBy: record.createdByName || record.expand?.createdBy?.name || 'System',
           isNew: true,
-          viewed: record.viewed || false,
-          status: record.status
-        })),
+            viewed: record.viewed || false, // Preserve viewed status from database
+            status: record.status,
+            verificationEventCount: record.verificationEvents?.length || 0,
+            lastVerificationEventId: record.verificationEvents?.length > 0 ? 
+              record.verificationEvents[record.verificationEvents.length - 1].timestamp : null,
+            completedAt: record.completedAt,
+            originalTimestamp: originalTimestamps.get(record.id) || record.created,
+            preservePosition: false
+          };
+        }),
       // Include deleted orders (keep until restored)
       ...records
         .filter(record => !record.visible && record.deletedDate)
-        .map(record => ({
+        .map(record => {
+          // Check if this is a new deletion
+          if (!existingNotifications.has(record.id)) {
+            incrementLocalCounter(record.id, record.deletedDate || '');
+            hasNewItems = true;
+          }
+          
+          return {
           id: record.id,
           orderNo: record.Order_No,
           message: 'has been deleted.',
-          timestamp: record.deletedDate,
+            timestamp: record.deletedDate || '',
           deletedBy: record.deletedBy,
           deletedDate: record.deletedDate,
           deleted: true,
-          viewed: record.viewed || false,
-          status: 'Deleted'
-        })),
-      // Regular notifications (keep until status changes)
+            viewed: record.viewed || false, // Preserve viewed status from database
+            status: 'Deleted',
+            verificationEventCount: record.verificationEvents?.length || 0,
+            lastVerificationEventId: record.verificationEvents?.length > 0 ? 
+              record.verificationEvents[record.verificationEvents.length - 1].timestamp : null,
+            completedAt: record.completedAt,
+            originalTimestamp: originalTimestamps.get(record.id) || record.deletedDate || '',
+            preservePosition: false
+          };
+        }),
+      // Regular notifications (include ALL non-pending documents, including Completed ones)
       ...records
         .filter(record => record.visible && record.status !== "Pending")
         .map(record => {
-          const message = formatNotificationMessage(record);
+          const message = formatNotificationMessageWithEvent(record);
           const isModified = hasOrderBeenModified(record);
           
+          const existingNotification = existingNotifications.get(record.id);
+          
+          // Check if this is a new verification event
+          const currentVerificationCount = record.verificationEvents?.length || 0;
+          const previousVerificationCount = existingNotification?.verificationEventCount || 0;
+          
+          // Get the latest verification event ID
+          const latestEventId = record.verificationEvents?.length > 0 ?
+            record.verificationEvents[record.verificationEvents.length - 1].timestamp : null;
+            
+          // Check if this is a new event or different latest event
+          const hasNewEvent = currentVerificationCount > previousVerificationCount ||
+            (latestEventId && latestEventId !== existingNotification?.lastVerificationEventId);
+          
+          // Check if status has changed
+          const hasStatusChanged = existingNotification && existingNotification.status !== record.status;
+            
+          // If new event or status changed, increment counter
+          if (hasNewEvent || hasStatusChanged) {
+            incrementLocalCounter(record.id, record.updated || record.created);
+            hasNewItems = true;
+          }
+          
+          // For completed documents, check if we have a preserved version
+          const preservedVersion = preservedCompletedDocuments.value.get(record.id);
+          
+          // Check if this is a completed document that should maintain its position
+          const isPreservedCompleted = record.status === 'Completed' && 
+                                     record.completedAt && 
+                                     !hasNewEvent && 
+                                     !hasStatusChanged;
+                                     
+          // Check if this is a newly completed document
+          const isNewlyCompleted = record.status === 'Completed' && 
+                                (!existingNotification || existingNotification.status !== 'Completed');
+          
+          // For newly completed documents, we want to show a notification and make it visible
+          if (isNewlyCompleted) {
+            hasNewItems = true;
+            incrementLocalCounter(record.id, record.updated || record.created);
+          }
+          
+          // Determine timestamp to use - prioritize preserving the original position
+          let timestamp;
+          
+          if (existingNotification) {
+            // If it's a newly completed document, use the original timestamp
+            if (isNewlyCompleted) {
+              timestamp = originalTimestamps.get(record.id) || existingNotification.timestamp;
+            } 
+            // If it's already completed, use its current timestamp
+            else if (record.status === 'Completed' && existingNotification.status === 'Completed') {
+              timestamp = existingNotification.timestamp;
+            }
+            // Otherwise use the updated timestamp
+            else {
+              timestamp = record.updated || record.created;
+            }
+          } else {
+            timestamp = record.updated || record.created;
+          }
+          
+          // Build the notification object with proper position preservation
           return {
             id: record.id,
             orderNo: record.Order_No,
             message,
             isModified,
-            timestamp: record.updated,
-            viewed: record.viewed || false,
+            timestamp: timestamp,
+            viewed: record.viewed || false, // Preserve viewed status from database
             status: record.status,
-            // Track the last action for sorting
-            lastAction: record.updated || record.created
+            lastAction: record.updated || record.created,
+            verificationEventCount: currentVerificationCount,
+            lastVerificationEventId: latestEventId,
+            completedAt: record.completedAt,
+            originalTimestamp: originalTimestamps.get(record.id) || record.updated || record.created,
+            preservePosition: isPreservedCompleted || isNewlyCompleted,
+            isNewlyCompleted: isNewlyCompleted
           };
-        }).filter(notification => notification.message)
+        }).filter(notification => notification.message) // Keep all notifications that have a message
     ];
 
-    // Sort notifications by most recent action
-    const sortedNotifications = allNotifications.sort((a, b) => {
-      // Get the most recent timestamp for each notification
-      const getLatestTimestamp = (notification: any) => {
-        if (notification.deleted) return notification.deletedDate;
-        if (notification.isNew) return notification.timestamp;
-        return notification.lastAction || notification.timestamp;
-      };
+    // Sort notifications using our improved custom sorter
+    const sortedNotifications = [...allNotifications].sort(preserveExistingPositions());
 
-      const timeA = new Date(getLatestTimestamp(a)).getTime();
-      const timeB = new Date(getLatestTimestamp(b)).getTime();
-      return timeB - timeA;
-    });
-
-    // Update unread count (only count unviewed items)
+    // Update unread count based on viewed status in database
     unreadCount.value = sortedNotifications.filter(n => !n.viewed).length;
     
     // Update notifications
     notifications.value = sortedNotifications;
+    
+    // Update preserved completed documents for the next cycle
+    preservedCompletedDocuments.value.clear();
+    sortedNotifications.forEach(notification => {
+      if (notification.status === 'Completed' && notification.completedAt) {
+        preservedCompletedDocuments.value.set(notification.id, notification);
+      }
+    });
+    
+    // Trigger animation if we found new items
+    if (hasNewItems && !isNotificationOpen.value) {
+      triggerCounterAnimation();
+    }
   } catch (error) {
     console.error("Error fetching notifications:", error);
   }
 };
 
-// Update the toggleNotifications function
+// Update the toggleNotifications function to only reset local counter
 const toggleNotifications = () => {
   isNotificationOpen.value = !isNotificationOpen.value;
   if (isNotificationOpen.value) {
     isDropdownOpen.value = false;
-    // Mark all notifications as viewed when opening dropdown
-    notifications.value.forEach(async (notification) => {
-      if (!notification.viewed) {
-        try {
-          await pb.collection("Collection_1").update(notification.id, { viewed: true });
-          notification.viewed = true;
-        } catch (error) {
-          console.error("Error marking notification as viewed:", error);
-        }
-      }
-    });
-    unreadCount.value = 0; // Reset counter when opening dropdown
+    
+    // Reset local notification counter when opening dropdown
+    // This only affects the UI counter, not the actual document viewed status
+    resetLocalCounter();
   } else {
     // Reset notification display limit when closing the dropdown
     notificationDisplayLimit.value = 20;
   }
 };
 
-// Update the handleNotificationClick function to not close notifications
+// Update the handleNotificationClick function to preserve document position for completed documents
 const handleNotificationClick = async (notification: any) => {
   if (notification.deleted) {
     const deletedDate = new Date(notification.deletedDate).toLocaleString("en-US", {
@@ -456,10 +683,8 @@ const handleNotificationClick = async (notification: any) => {
       );
       
       if (order) {
-        // Only mark as viewed, but keep the notification until status changes
-        if (!order.viewed) {
-          await pb.collection("Collection_1").update(order.id, { viewed: true });
-        }
+        // IMPORTANT: For completed documents, do not modify anything when simply viewing
+        // This prevents them from moving to the top of the list when opened
 
         const formattedOrder = {
           id: order.id,
@@ -476,7 +701,13 @@ const handleNotificationClick = async (notification: any) => {
           deliveryDate: order.deliveryDate,
           verifiedAt: order.verifiedAt,
           verifiedBy: order.verifiedBy,
-          completedAt: order.completedAt
+          completedAt: order.completedAt,
+          // Pass original updated timestamp to avoid modifying sort order
+          updated: order.updated,
+          // Explicitly preserve viewed status (likely false for new documents)
+          viewed: order.viewed,
+          // Add a flag to indicate this document should not be re-sorted
+          preservePosition: order.status === 'Completed'
         };
         
         emit('openModal', formattedOrder);
@@ -527,25 +758,6 @@ const markAllAsRead = async () => {
 const clearAllNotifications = () => {
   notifications.value = [];
   unreadCount.value = 0;
-};
-
-// Update the time-based grouping functions to handle timezone
-const getTimeGroup = (timestamp: string) => {
-  const now = new Date();
-  const date = new Date(timestamp);
-  
-  // Convert both dates to Asia/Manila timezone for consistent comparison
-  const nowManila = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
-  const dateManila = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
-  
-  const diffTime = nowManila.getTime() - dateManila.getTime();
-  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-  
-  if (diffDays === 0) return 'Today';
-  if (diffDays === 1) return 'Yesterday';
-  if (diffDays <= 7) return 'This Week';
-  if (diffDays <= 30) return 'This Month';
-  return 'Last Month';
 };
 
 // Group notifications by time with display limit
@@ -621,7 +833,7 @@ const getNotificationIcon = (notification: any) => {
   // Check if it's a new order notification
   if (notification.isNew || notification.message.includes('has been created')) {
     return {
-      component: File,
+      component: FilePlus2,
       class: 'text-purple-600'
     };
   }
@@ -665,7 +877,7 @@ const getNotificationIcon = (notification: any) => {
     };
   } else if (notification.message.includes('verified')) {
     return {
-      component: Check,
+      component: CircleCheckBig,
       class: 'text-blue-500'
     };
   } else if (notification.message.includes('extended')) {
@@ -691,6 +903,28 @@ const loadMoreNotifications = () => {
     notificationDisplayLimit.value += incrementNotificationsBy;
     isLoadingMoreNotifications.value = false;
   }, 300);
+};
+
+// Add computed property to return the notification counter to display
+const notificationCountToDisplay = computed(() => {
+  return isNotificationOpen.value ? unreadCount.value : localNotificationCounter.value;
+});
+
+// Update showNotificationCounter to use the local counter
+const showNotificationCounter = computed(() => {
+  return localNotificationCounter.value > 0 && !isNotificationOpen.value;
+});
+
+// Function to check if order has been modified
+const hasOrderBeenModified = (order: any) => {
+  return order.verificationEvents?.some((event: any) => 
+    event.type === 'modify' || event.type === 'undo'
+  );
+};
+
+// Legacy function for backward compatibility
+const formatNotificationMessage = (order: any) => {
+  return formatNotificationMessageWithEvent(order);
 };
 </script>
 
@@ -733,7 +967,7 @@ const loadMoreNotifications = () => {
                 :class="{ 'animate-bounce': shouldAnimate }"
                 class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full min-w-[20px] h-5 flex items-center justify-center px-1 transform transition-all duration-300"
               >
-                {{ unreadCount }}
+                {{ notificationCountToDisplay }}
               </span>
             </transition>
           </div>
