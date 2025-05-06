@@ -231,7 +231,7 @@ const pb = new PocketBase("http://127.0.0.1:8090");
 const searchStore = useSearchStore(); // ✅ Initialize store
 
 // Refresh Table Every Second
-// const refreshInterval = ref<ReturnType<typeof setInterval> | null>(null);
+const refreshInterval = ref<ReturnType<typeof setInterval> | null>(null);
 const isOverlayOpen = ref(false);
 const isOverlayMinimized = ref(false);
 
@@ -347,21 +347,21 @@ const startPolling = () => {
     fetchSelectedOrder();
   }
 
-  // Set up interval for every second
-  // refreshInterval.value = setInterval(() => {
-  //   fetchDocuments();
-  //   if (isOverlayOpen.value) {
-  //     fetchSelectedOrder();
-  //   }
-  // }, 1000);
+  // Set up interval for polling (every 5 seconds)
+  refreshInterval.value = setInterval(() => {
+    fetchDocuments();
+    if (isOverlayOpen.value) {
+      fetchSelectedOrder();
+    }
+  }, 2000); // 5 seconds polling interval for better reactivity
 };
 
-// const stopPolling = () => {
-//   if (refreshInterval.value) {
-//     clearInterval(refreshInterval.value);
-//     refreshInterval.value = null;
-//   }
-// };
+const stopPolling = () => {
+  if (refreshInterval.value) {
+    clearInterval(refreshInterval.value);
+    refreshInterval.value = null;
+  }
+};
 // End of Refresh Interval
 
 // const formatDateShort = (dateString: string) => {
@@ -2007,9 +2007,9 @@ onMounted(async () => {
   startPolling();
 });
 
-// onUnmounted(() => {
-//   stopPolling();
-// });
+onUnmounted(() => {
+  stopPolling();
+});
 
 // Add a standardized date comparison function
 const areDatesEqual = (
