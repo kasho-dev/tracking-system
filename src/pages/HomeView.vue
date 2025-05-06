@@ -841,67 +841,6 @@ const formatTimestamp = (timestamp: string) => {
   }
 };
 
-// const completeDocument = async () => {
-//   if (!selectedOrder.value) return;
-
-//   // Validation - should never happen in normal flow
-//   if (!selectedOrder.value.verifiedAt) {
-//     alert("Document must be verified before completion");
-//     return;
-//   }
-
-//   const completionTimestamp = new Date().toISOString();
-
-//   try {
-//     await pb.collection("Collection_1").update(selectedOrder.value.id, {
-//       status: "Completed",
-//       completedAt: completionTimestamp,
-//       updatedAt: completionTimestamp,
-//     });
-
-//     // Update all relevant state
-//     selectedOrder.value.status = "Completed";
-//     selectedOrder.value.completedAt = completionTimestamp;
-
-//     const docIndex = documents.value.findIndex(
-//       (d) => d.id === selectedOrder.value?.id
-//     );
-//     if (docIndex !== -1) {
-//       documents.value[docIndex].status = "Completed";
-//       documents.value[docIndex].completedAt = completionTimestamp;
-//     }
-//   } catch (error) {
-//     console.error("Completion failed:", error);
-//   }
-// };
-
-// End of Timeline Script
-
-// Store the user data
-// const tassadarUser = ref<any>(null);
-
-// // Fetch the user by email or ID
-// const fetchTassadarUser = async () => {
-//   try {
-//     // METHOD 1: Get by email (if you know it)
-//     tassadarUser.value = await pb
-//       .collection("users")
-//       .getFirstListItem('email="logangster86@gmail.com"');
-
-//     // OR METHOD 2: Get by ID (from your screenshot)
-//     // tassadarUser.value = await pb.collection('users').getOne("Rigm2021984p");
-
-//     console.log("Fetched user:", tassadarUser.value);
-//   } catch (error) {
-//     console.error("Error fetching user:", error);
-//     // Fallback to hardcoded name if fetch fails
-//     tassadarUser.value = { name: "tassadar" };
-//   }
-// };
-
-// // Call this when your component mounts
-// fetchTassadarUser();
-
 // Sorting Table
 const sortField = ref("updated");
 const sortDirection = ref("desc");
@@ -913,8 +852,8 @@ const sortedDocuments = computed(() => {
   return [...filteredDocuments.value].sort((a, b) => {
     // If sorting by a specific column other than dates
     if (field !== 'dateCreated' && field !== 'updated') {
-      const valueA = String(a[field as keyof Document]).toLowerCase();
-      const valueB = String(b[field as keyof Document]).toLowerCase();
+    const valueA = String(a[field as keyof Document]).toLowerCase();
+    const valueB = String(b[field as keyof Document]).toLowerCase();
       return direction === 'asc' 
         ? valueA.localeCompare(valueB)
         : valueB.localeCompare(valueA);
@@ -1807,13 +1746,6 @@ const deleteSelectedDocuments = async () => {
   }
 };
 
-//Checkbox Change Icon Function
-// const handleCheckboxChange = (id: string) => {
-//   // Changed parameter type
-//   toggleSelection(id);
-//   toggleOverlaySelection(id);
-// };
-
 // Computed property to filter documents
 const filteredDocuments = computed(() => {
   let filtered = documents.value;
@@ -2200,6 +2132,91 @@ watch(() => searchStore.searchQuery, () => {
   // Reset display limit when search query changes
   documentDisplayLimit.value = 10;
 });
+
+const handleSubmit = async () => {
+  const isValid = validateForm();
+  if (!isValid) return;
+
+  const creatorName = currentUser.value?.name || currentUser.value?.email || "Unknown";
+  const formattedDeliveryDate = new Date(deliveryDate.value).toISOString();
+
+  const data = {
+    Order_No: poNumber.value,
+    supplierName: supplierName.value,
+    address: address.value,
+    tin_ID: tin_ID.value,
+    modeofProcurement: modeofProcurement.value,
+    deliveryDate: formattedDeliveryDate,
+    createdByName: creatorName,
+  };
+
+  try {
+    if (isEditMode.value && currentEditingId.value) {
+      await pb.collection("Collection_1").update(currentEditingId.value, data);
+      const record = await pb
+        .collection("Collection_1")
+        .update(currentEditingId.value, data);
+      const docIndex = documents.value.findIndex(
+        (doc) => doc.id === currentEditingId.value
+      );
+      if (docIndex !== -1) {
+        documents.value[docIndex] = {
+          ...documents.value[docIndex],
+          ...data,
+          deliveryDate: formatDeliveryDateTime(formattedDeliveryDate) || "",
+        };
+      }
+      if (selectedOrder.value?.id === currentEditingId.value) {
+        selectedOrder.value = {
+          ...selectedOrder.value,
+          ...data,
+          deliveryDate: formatDeliveryDateTime(formattedDeliveryDate) || "",
+        };
+      }
+    } else {
+      // Create new document
+      const record = await pb.collection("Collection_1").create({
+        ...data,
+        trackingId: `seq${Math.floor(Math.random() * 1000000)}`,
+        handledBy: creatorName,
+        status: "Pending",
+        visible: true  // Set visible to true by default
+      });
+
+      // Format the delivery date using the same function used in the overlay
+      const formattedPhDate = formatDeliveryDateTime(formattedDeliveryDate);
+
+      documents.value.push({
+        id: record.id,
+        orderNumber: `${record.Order_No}`,
+        trackingId: record.trackingId,
+        handledBy: record.handledBy,
+        createdBy: creatorName,
+        createdByName: creatorName,
+        dateCreated: new Date(record.created).toLocaleString(),
+        status: record.status,
+        fileType: "xlsx",
+        supplierName: record.supplierName,
+        address: record.address,
+        tin_ID: record.tin_ID,
+        modeofProcurement: record.modeofProcurement,
+        deliveryDate: formattedPhDate || "",
+        viewed: false,
+      });
+    }
+
+    closeModalAdd();
+    isOverlayMinimized.value = false;
+  } catch (error) {
+    console.error("Error:", error);
+    alert(`Failed to ${isEditMode.value ? "update" : "create"} order.`);
+  }
+};
+
+const validateForm = () => {
+  // Add any additional validation logic you want to execute before submitting
+  return true;
+};
 </script>
 
 <template>

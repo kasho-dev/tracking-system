@@ -4,7 +4,7 @@ import { Toolbar } from "primevue";
 import PocketBase from 'pocketbase';
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { User, Settings, LogOut, LayoutDashboard, Bell, Check, X, CheckCircle2, AlertTriangle, Clock, AlertCircle, CheckCircle, ArrowUpCircle, Trash, File } from 'lucide-vue-next';
+import { User, Settings, LogOut, LayoutDashboard, Bell, Check, X, CheckCircle2, AlertTriangle, Clock, AlertCircle, CheckCircle, ArrowUpCircle, Trash, File, FileEdit } from 'lucide-vue-next';
 
 const pb = new PocketBase('http://127.0.0.1:8090');
 const searchStore = useSearchStore();
@@ -95,45 +95,186 @@ const notificationDisplayLimit = ref(20);
 const incrementNotificationsBy = 20;
 const isLoadingMoreNotifications = ref(false);
 
-// Add event listener for new orders and deleted orders
+// Add animation state for notification counter
+const shouldAnimate = ref(false);
+
+// Function to trigger notification counter animation
+const triggerCounterAnimation = () => {
+  shouldAnimate.value = true;
+  setTimeout(() => {
+    shouldAnimate.value = false;
+  }, 300); // Animation duration
+};
+
+// Add this computed property to control counter visibility
+const showNotificationCounter = computed(() => {
+  return unreadCount.value > 0 && !isNotificationOpen.value;
+});
+
+// Update the subscription handler to consider dropdown state
 onMounted(() => {
-  // Listen for new order creation
-  window.addEventListener('orderCreated', ((event: CustomEvent) => {
-    const { orderNo, createdBy } = event.detail;
-    notifications.value.unshift({
-      id: `new-${Date.now()}`,
-      orderNo,
+  // TEMPORARY TEST NOTIFICATIONS - TO BE REMOVED
+  notifications.value = [
+    {
+      id: 'test1',
+      orderNo: 'APO-001',
       message: 'has been created and is pending review.',
       timestamp: new Date().toISOString(),
-      createdBy,
       isNew: true,
-      viewed: false
-    });
-    // Force notification update
-    updateNotifications();
-  }) as EventListener);
+      viewed: false,
+      status: 'Pending'
+    },
+    {
+      id: 'test2',
+      orderNo: 'APO-002',
+      message: 'needs action.',
+      timestamp: new Date().toISOString(),
+      viewed: false,
+      status: 'Needs Action'
+    },
+    {
+      id: 'test3',
+      orderNo: 'APO-003',
+      message: 'has been edited.',
+      timestamp: new Date().toISOString(),
+      viewed: false,
+      status: 'Pending'
+    },
+    {
+      id: 'test4',
+      orderNo: 'APO-004',
+      message: 'has been verified.',
+      timestamp: new Date().toISOString(),
+      viewed: false,
+      status: 'Verified'
+    },
+    {
+      id: 'test5',
+      orderNo: 'APO-005',
+      message: 'has been completed and verified.',
+      timestamp: new Date().toISOString(),
+      viewed: false,
+      status: 'Completed'
+    },
+    {
+      id: 'test6',
+      orderNo: 'APO-006',
+      message: 'has lapsed.',
+      timestamp: new Date().toISOString(),
+      viewed: false,
+      status: 'Lapsed'
+    },
+    {
+      id: 'test7',
+      orderNo: 'APO-007',
+      message: 'will fully lapse in 2 days.',
+      timestamp: new Date().toISOString(),
+      viewed: false,
+      status: 'Pending'
+    },
+    {
+      id: 'test8',
+      orderNo: 'APO-008',
+      message: 'has been extended.',
+      timestamp: new Date().toISOString(),
+      viewed: false,
+      status: 'Extended'
+    },
+    {
+      id: 'test9',
+      orderNo: 'APO-009',
+      message: 'has been deleted.',
+      timestamp: new Date().toISOString(),
+      viewed: false,
+      status: 'Deleted',
+      deleted: true,
+      deletedBy: 'Admin User',
+      deletedDate: new Date().toISOString()
+    }
+  ];
+
+  // Set unread count
+  unreadCount.value = notifications.value.length;
+
+  // Subscribe to real-time updates for Collection_1
+  pb.collection('Collection_1').subscribe('*', async (e) => {
+    const record = e.record;
+    let shouldUpdateCounter = false;
+    
+    // Handle record updates
+    if (e.action === 'create') {
+      // New document created
+      notifications.value.unshift({
+        id: record.id,
+        orderNo: record.Order_No,
+        message: 'has been created and is pending review.',
+        timestamp: record.created,
+        createdBy: record.createdByName || record.expand?.createdBy?.name || 'System',
+        isNew: true,
+        viewed: false,
+        status: record.status
+      });
+      shouldUpdateCounter = !isNotificationOpen.value;
+    } else if (e.action === 'update') {
+      // Document updated - check for status changes, etc.
+      const existingNotificationIndex = notifications.value.findIndex(n => n.id === record.id);
+      const oldNotification = notifications.value[existingNotificationIndex];
+      
+      if (existingNotificationIndex !== -1) {
+        const message = formatNotificationMessage(record);
+        if (message) {
+          notifications.value[existingNotificationIndex] = {
+            id: record.id,
+            orderNo: record.Order_No,
+            message,
+            isModified: hasOrderBeenModified(record),
+            timestamp: record.updated,
+            viewed: isNotificationOpen.value, // Mark as viewed if dropdown is open
+            status: record.status,
+            lastAction: record.updated || record.created
+          };
+          shouldUpdateCounter = !isNotificationOpen.value;
+        }
+      }
+    } else if (e.action === 'delete') {
+      // Document deleted
+      notifications.value = notifications.value.filter(n => n.id !== record.id);
+      shouldUpdateCounter = !isNotificationOpen.value;
+    }
+    
+    // Update unread count and trigger animation if needed
+    if (shouldUpdateCounter) {
+      unreadCount.value = notifications.value.filter(n => !n.viewed).length;
+      triggerCounterAnimation();
+    }
+  });
 
   document.addEventListener('click', closeNotification, true);
   document.addEventListener('click', closeDropdown);
-  updateNotifications();
-  // Poll every 30 seconds
-  notificationInterval = window.setInterval(updateNotifications, 30000);
+  
+  // Comment out the initial fetch since we're using test data
+  // updateNotifications();
 });
 
 onBeforeUnmount(() => {
-  // Remove new order listener
-  window.removeEventListener('orderCreated', (() => {}) as EventListener);
+  // Unsubscribe from real-time updates
+  pb.collection('Collection_1').unsubscribe();
   document.removeEventListener('click', closeNotification, true);
   document.removeEventListener('click', closeDropdown);
-  if (notificationInterval) {
-    clearInterval(notificationInterval);
-  }
 });
 
 // Function to format notification message
 const formatNotificationMessage = (order: any) => {
   if (order.deleted) {
     return 'has been deleted.';
+  }
+
+  // Check for edit events first
+  const hasEditEvent = order.verificationEvents?.some((event: any) => 
+    event.type === 'modify' || event.type === 'edit'
+  );
+  if (hasEditEvent) {
+    return 'has been edited.';
   }
 
   const status = order.status;
@@ -269,12 +410,12 @@ const updateNotifications = async () => {
   }
 };
 
-// Toggle notification dropdown
+// Update the toggleNotifications function
 const toggleNotifications = () => {
   isNotificationOpen.value = !isNotificationOpen.value;
   if (isNotificationOpen.value) {
     isDropdownOpen.value = false;
-    // Mark notifications as viewed when opening dropdown
+    // Mark all notifications as viewed when opening dropdown
     notifications.value.forEach(async (notification) => {
       if (!notification.viewed) {
         try {
@@ -285,7 +426,7 @@ const toggleNotifications = () => {
         }
       }
     });
-    unreadCount.value = 0;
+    unreadCount.value = 0; // Reset counter when opening dropdown
   } else {
     // Reset notification display limit when closing the dropdown
     notificationDisplayLimit.value = 20;
@@ -388,9 +529,6 @@ const clearAllNotifications = () => {
   unreadCount.value = 0;
 };
 
-// Set up polling for notifications
-let notificationInterval: number | null = null;
-
 // Update the time-based grouping functions to handle timezone
 const getTimeGroup = (timestamp: string) => {
   const now = new Date();
@@ -478,13 +616,13 @@ const getRelativeTime = (timestamp: string) => {
   });
 };
 
-// Update the getNotificationIcon function to include new order icon
+// Update the getNotificationIcon function
 const getNotificationIcon = (notification: any) => {
   // Check if it's a new order notification
-  if (notification.isNew) {
+  if (notification.isNew || notification.message.includes('has been created')) {
     return {
       component: File,
-      class: 'text-green-500'
+      class: 'text-purple-600'
     };
   }
 
@@ -493,6 +631,14 @@ const getNotificationIcon = (notification: any) => {
     return {
       component: Trash,
       class: 'text-red-500'
+    };
+  }
+
+  // Check if it's an edit notification
+  if (notification.message.includes('edited')) {
+    return {
+      component: FileEdit,
+      class: 'text-blue-500'
     };
   }
 
@@ -512,10 +658,20 @@ const getNotificationIcon = (notification: any) => {
       component: Clock,
       class: 'text-orange-500'
     };
-  } else if (notification.message.includes('almost due')) {
+  } else if (notification.message.includes('needs action')) {
     return {
-      component: Clock,
-      class: 'text-yellow-500'
+      component: AlertCircle,
+      class: 'text-yellow-400'
+    };
+  } else if (notification.message.includes('verified')) {
+    return {
+      component: Check,
+      class: 'text-blue-500'
+    };
+  } else if (notification.message.includes('extended')) {
+    return {
+      component: ArrowUpCircle,
+      class: 'text-orange-400'
     };
   }
 
@@ -562,14 +718,24 @@ const loadMoreNotifications = () => {
         <!-- Notification Button -->
         <div class="relative notification-icon" v-if="!isSettingsPage">
           <div 
-            class="cursor-pointer p-2 rounded-full hover:bg-gray-700 transition relative"
+            class="cursor-pointer p-2 rounded-full hover:bg-gray-700/20 transition-colors duration-200"
             @click="toggleNotifications"
           >
             <Bell class="w-5 h-5" />
-            <span v-if="unreadCount > 0" 
-              class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-              {{ unreadCount }}
-            </span>
+            <transition
+              enter-active-class="transform scale-100 transition-all duration-300 ease-out"
+              enter-from-class="transform scale-50 opacity-0"
+              leave-active-class="transition-all duration-200 ease-in"
+              leave-to-class="transform scale-95 opacity-0"
+            >
+              <span 
+                v-if="showNotificationCounter"
+                :class="{ 'animate-bounce': shouldAnimate }"
+                class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full min-w-[20px] h-5 flex items-center justify-center px-1 transform transition-all duration-300"
+              >
+                {{ unreadCount }}
+              </span>
+            </transition>
           </div>
 
           <!-- Notification Dropdown -->
@@ -777,5 +943,46 @@ const loadMoreNotifications = () => {
 /* Add smooth transition for notification text */
 .group:hover .text-blue-600 {
   transition: color 0.2s ease;
+}
+
+/* Add these styles at the end of your component */
+@keyframes notification-pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.notification-badge-animate {
+  animation: notification-pulse 0.3s ease-in-out;
+}
+
+/* Enhance the notification dropdown animation */
+.dropdown-enter-active,
+.dropdown-leave-active {
+  transition: all 0.3s ease;
+}
+
+.dropdown-enter-from,
+.dropdown-leave-to {
+  transform: translateY(-10px);
+  opacity: 0;
+}
+
+/* Add smooth transition for notification counter */
+.notification-counter-enter-active,
+.notification-counter-leave-active {
+  transition: all 0.3s ease;
+}
+
+.notification-counter-enter-from,
+.notification-counter-leave-to {
+  transform: scale(0.5);
+  opacity: 0;
 }
 </style>
