@@ -204,7 +204,32 @@ onMounted(() => {
       // Document updated - check for status changes, etc.
       const existingNotificationIndex = notifications.value.findIndex(n => n.id === record.id);
       
-      if (existingNotificationIndex !== -1) {
+      // Check if this is a "soft deletion" (visible changed to false)
+      if (record.visible === false && record.deletedDate) {
+        // Handle as a deletion
+        const deletedNotification = {
+          id: record.id,
+          orderNo: record.Order_No,
+          message: 'has been deleted.',
+          timestamp: record.deletedDate,
+          deletedBy: record.deletedBy || 'Unknown',
+          deleted: true,
+          viewed: false,
+          status: 'Deleted'
+        };
+        
+        if (existingNotificationIndex !== -1) {
+          // Replace existing notification
+          notifications.value[existingNotificationIndex] = deletedNotification;
+        } else {
+          // Add new notification
+          notifications.value.unshift(deletedNotification);
+        }
+        
+        // Increment local counter for deletion
+        incrementLocalCounter(record.id, record.deletedDate);
+        shouldUpdateCounter = !isNotificationOpen.value;
+      } else if (existingNotificationIndex !== -1) {
         const message = formatNotificationMessageWithEvent(record);
         
         // Special handling for completed documents - don't update position
@@ -245,7 +270,7 @@ onMounted(() => {
         }
       }
     } else if (e.action === 'delete') {
-      // Document deleted
+      // Document deleted (hard deletion)
       notifications.value = notifications.value.filter(n => n.id !== record.id);
       // Remove from preserved documents
       preservedCompletedDocuments.value.delete(record.id);
@@ -477,7 +502,7 @@ const updateNotifications = async () => {
     const allNotifications = [
       // Include new orders (keep until status changes from Pending)
       ...records
-        .filter(record => record.status === "Pending" && !record.completedAt)
+        .filter(record => record.status === "Pending" && !record.completedAt && record.visible !== false)
         .map(record => {
           // Check if this is a new notification
           if (!existingNotifications.has(record.id)) {
@@ -504,10 +529,15 @@ const updateNotifications = async () => {
         }),
       // Include deleted orders (keep until restored)
       ...records
-        .filter(record => !record.visible && record.deletedDate)
+        .filter(record => record.visible === false && record.deletedDate)
         .map(record => {
-          // Check if this is a new deletion
-          if (!existingNotifications.has(record.id)) {
+          // Check if this is a new deletion or previously unseen deletion
+          const existingNotification = existingNotifications.get(record.id);
+          const isNewOrUnseenDeletion = !existingNotification || 
+                                      existingNotification.status !== 'Deleted' ||
+                                      !existingNotification.viewed;
+          
+          if (isNewOrUnseenDeletion) {
             incrementLocalCounter(record.id, record.deletedDate || '');
             hasNewItems = true;
           }
@@ -520,7 +550,7 @@ const updateNotifications = async () => {
           deletedBy: record.deletedBy,
           deletedDate: record.deletedDate,
           deleted: true,
-            viewed: record.viewed || false, // Preserve viewed status from database
+            viewed: existingNotification?.status === 'Deleted' ? existingNotification.viewed : false,
             status: 'Deleted',
             verificationEventCount: record.verificationEvents?.length || 0,
             lastVerificationEventId: record.verificationEvents?.length > 0 ? 
@@ -530,9 +560,9 @@ const updateNotifications = async () => {
             preservePosition: false
           };
         }),
-      // Regular notifications (include ALL non-pending documents, including Completed ones)
+      // Regular notifications (include ALL non-pending and visible documents, including Completed ones)
       ...records
-        .filter(record => record.visible && record.status !== "Pending")
+        .filter(record => record.visible !== false && record.status !== "Pending")
         .map(record => {
           const message = formatNotificationMessageWithEvent(record);
           const isModified = hasOrderBeenModified(record);
@@ -662,8 +692,26 @@ const toggleNotifications = () => {
 
 // Update the handleNotificationClick function to preserve document position for completed documents
 const handleNotificationClick = async (notification: any) => {
+  // 1. First mark this notification as viewed immediately to prevent repeated counter increments
+  if (!notification.viewed) {
+    try {
+      // If this is a deleted document notification, just mark it as viewed locally
+      if (notification.deleted) {
+        notification.viewed = true;
+      } else {
+        // For non-deleted documents, update in the database
+        await pb.collection("Collection_1").update(notification.id, { viewed: true });
+        notification.viewed = true;
+      }
+    } catch (error) {
+      // Continue even if update fails - mainly for deleted documents that might not exist anymore
+      console.log("Could not mark notification as viewed:", error);
+    }
+  }
+
+  // 2. Then handle the click based on notification type
   if (notification.deleted) {
-    const deletedDate = new Date(notification.deletedDate).toLocaleString("en-US", {
+    const deletedDate = notification.deletedDate ? new Date(notification.deletedDate).toLocaleString("en-US", {
       timeZone: "Asia/Manila",
       year: 'numeric',
       month: 'long',
@@ -671,8 +719,9 @@ const handleNotificationClick = async (notification: any) => {
       hour: 'numeric',
       minute: '2-digit',
       hour12: true
-    });
-    alert(`${notification.orderNo} has been deleted by ${notification.deletedBy} on ${deletedDate} and is no longer available.`);
+    }) : 'unknown date';
+    
+    alert(`${notification.orderNo} was deleted by ${notification.deletedBy || 'Unknown'} on ${deletedDate} and is no longer available.`);
   } else {
     try {
       const order = await pb.collection("Collection_1").getFirstListItem(
@@ -704,18 +753,18 @@ const handleNotificationClick = async (notification: any) => {
           completedAt: order.completedAt,
           // Pass original updated timestamp to avoid modifying sort order
           updated: order.updated,
-          // Explicitly preserve viewed status (likely false for new documents)
-          viewed: order.viewed,
+          // Force viewed status to true since we're viewing it now
+          viewed: true,
           // Add a flag to indicate this document should not be re-sorted
           preservePosition: order.status === 'Completed'
         };
         
         emit('openModal', formattedOrder);
       } else {
-        alert('This order is no longer available');
+        alert('This order is no longer available.');
       }
     } catch (error) {
-      alert('This order is no longer available');
+      alert('This order is no longer available.');
     }
   }
 };
@@ -745,11 +794,28 @@ const emit = defineEmits(['openModal']);
 const markAllAsRead = async () => {
   try {
     const unreadNotifications = notifications.value.filter(n => !n.viewed);
+    
+    // Process notifications in batches for efficiency
     for (const notification of unreadNotifications) {
-      await pb.collection("Collection_1").update(notification.id, { viewed: true });
-      notification.viewed = true;
+      // For deleted documents, just mark them as viewed locally
+      if (notification.deleted || notification.status === 'Deleted') {
+        notification.viewed = true;
+      } else {
+        // For regular documents, update the database
+        try {
+          await pb.collection("Collection_1").update(notification.id, { viewed: true });
+          notification.viewed = true;
+        } catch (error) {
+          // If document doesn't exist or another error occurs, just update locally
+          notification.viewed = true;
+          console.log(`Error updating viewed status for document ${notification.id}:`, error);
+        }
+      }
     }
+    
+    // Reset all counters
     unreadCount.value = 0;
+    resetLocalCounter();
   } catch (error) {
     console.error("Error marking all as read:", error);
   }
