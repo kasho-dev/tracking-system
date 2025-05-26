@@ -38,8 +38,8 @@ watch(() => props.selectedDoc, (newDoc) => {
 // Define the type for documents
 interface FieldChange {
   changed: boolean;
-  oldValue?: string;
-  newValue: string;
+  oldValue?: string | undefined;
+  newValue: string | undefined;
 }
 
 interface ModifiedFields {
@@ -49,6 +49,7 @@ interface ModifiedFields {
   tin_ID?: FieldChange;
   modeofProcurement?: FieldChange;
   deliveryDate?: FieldChange;
+  dateOfPO?: FieldChange;
 }
 
 interface VerificationEvent {
@@ -76,6 +77,7 @@ interface Document {
   tin_ID: string;
   modeofProcurement: string;
   deliveryDate: string;
+  dateOfPO?: string | null;  // Update type to allow null
   verifiedAt?: string;
   verifiedBy?: string;
   verifiedByName?: string;
@@ -295,6 +297,7 @@ const fetchSelectedOrder = async () => {
     // Format dates using the new function
     const formattedDeliveryDate = formatEditedDateTime(record.deliveryDate);
     const formattedCreatedDate = formatEditedDateTime(record.created, true);
+    const formattedDateOfPO = formatDeliveryDateTime(record.dateOfPO);
 
     selectedOrder.value = {
       ...selectedOrder.value,
@@ -332,6 +335,7 @@ const fetchSelectedOrder = async () => {
         "System",
       updated: record.updated,
       verificationEvents,
+      dateOfPO: formattedDateOfPO || null, // Use formattedDateOfPO and allow null
     };
   } catch (error) {
     console.error("Error refreshing selected order:", error);
@@ -720,6 +724,7 @@ const events = computed(() => {
               tin_ID: "TIN ID",
               modeofProcurement: "Mode of Procurement",
               deliveryDate: "Delivery Date",
+              dateOfPO: "Date of PO",
             };
 
             // Special handling for delivery date field
@@ -898,6 +903,9 @@ const originalTinId = ref("");
 const originalProcurementMode = ref("");
 const originalDeliveryDate = ref("");
 
+// Add a new ref for originalDateOfPO
+const originalDateOfPO = ref<string | null | undefined>(undefined); // Allow undefined
+
 // Add computed property to determine if fields have changed
 const hasChanges = computed(() => {
   if (!isEditMode.value) return true; // For new orders, always enable the button
@@ -910,7 +918,8 @@ const hasChanges = computed(() => {
     address.value !== originalAddress.value ||
     tin_ID.value !== originalTinId.value ||
     modeofProcurement.value !== originalProcurementMode.value ||
-    deliveryDate.value !== originalDeliveryDate.value
+    deliveryDate.value !== originalDeliveryDate.value ||
+    !areDatesEqual(dateOfPO.value || null, originalDateOfPO.value)
   );
 });
 
@@ -971,6 +980,20 @@ const openEditModal = (order: Document) => {
     deliveryDate.value = "";
   }
 
+  // Format DateOfPO if it exists
+  if (order.dateOfPO) {
+    const date = new Date(order.dateOfPO);
+    const localDate = new Date(date.getTime());
+    const year = localDate.getFullYear();
+    const month = String(localDate.getMonth() + 1).padStart(2, '0');
+    const day = String(localDate.getDate()).padStart(2, '0');
+    const hours = String(localDate.getHours()).padStart(2, '0');
+    const minutes = String(localDate.getMinutes()).padStart(2, '0');
+    dateOfPO.value = `${year}-${month}-${day}T${hours}:${minutes}`;
+  } else {
+    dateOfPO.value = "";
+  }
+
   // Save original values for comparison
   originalPoNumber.value = poNumber.value;
   originalSupplierName.value = supplierName.value;
@@ -978,6 +1001,7 @@ const openEditModal = (order: Document) => {
   originalTinId.value = tin_ID.value;
   originalProcurementMode.value = modeofProcurement.value;
   originalDeliveryDate.value = deliveryDate.value;
+  originalDateOfPO.value = order.dateOfPO; // Save original Date of PO
 
   showModal.value = true;
   isOverlayMinimized.value = false;
@@ -1001,7 +1025,6 @@ const openModalAdd = () => {
   showDeliveryDateError.value = false;
   dateError.value = false;
   duplicateOrderNumberError.value = false;
-  
   // Generate new token for this form session
   validateFormToken();
   
@@ -1018,6 +1041,7 @@ const closeModalAdd = () => {
   tin_ID.value = "";
   modeofProcurement.value = "";
   deliveryDate.value = "";
+  dateOfPO.value = "";  // Reset new field
   isOverlayMinimized.value = false; // Restore overlay when canceling
   
   // Clear security token to invalidate form session
@@ -1028,7 +1052,7 @@ const closeModalAdd = () => {
 const fetchDocuments = async () => {
   try {
     const records = await pb.collection("Collection_1").getFullList({
-      filter: 'visible = true',  // Only get visible documents
+      filter: 'visible = true',
       sort: "-updated",
       expand:
         "verifiedAt,completedAt,updated,verifiedBy,verificationEvents.userId,createdBy",
@@ -1038,6 +1062,7 @@ const fetchDocuments = async () => {
       records.map(async (record) => {
         const docData = {
           deliveryDate: record.deliveryDate,
+          dateOfPO: record.dateOfPO,  // Keep as is since type now allows null
           status: record.status,
           verificationEvents: record.verificationEvents,
           updated: record.updated,
@@ -1060,7 +1085,7 @@ const fetchDocuments = async () => {
                   deliveryDate: {
                     changed: true,
                     oldValue: formatDeliveryDateTime(record.deliveryDate),
-                    newValue: "Lapsed", // or you can use an empty string or a message
+                    newValue: "Lapsed",
                   },
                 },
               };
@@ -1083,7 +1108,6 @@ const fetchDocuments = async () => {
           completedAt: record.completedAt,
           orderNumber: `${record.Order_No}`,
           trackingId: record.trackingId,
-
           handledBy:
             record.expand?.lastModifiedBy?.name ||
             record.lastModifiedByName ||
@@ -1097,9 +1121,8 @@ const fetchDocuments = async () => {
             record.createdByName ||
             record.createdBy ||
             "System",
-
           createdByName: record.expand?.createdBy?.name || record.createdByName,
-          dateCreated: record.created, // Store ISO string
+          dateCreated: record.created,
           created: record.created,
           status: record.status,
           supplierName: record.supplierName,
@@ -1107,6 +1130,7 @@ const fetchDocuments = async () => {
           tin_ID: record.tin_ID,
           modeofProcurement: record.modeofProcurement,
           deliveryDate: record.deliveryDate,
+          dateOfPO: record.dateOfPO,  // Keep as is since type now allows null
           verifiedAt: record.verifiedAt,
           verifiedBy: record.verifiedBy,
           verifiedByName:
@@ -1120,7 +1144,7 @@ const fetchDocuments = async () => {
             timestamp: event.timestamp,
             userId: event.userId,
             userName: event.userName,
-            modifiedFields: event.modifiedFields || {}, // Add this line to preserve modifiedFields
+            modifiedFields: event.modifiedFields || {},
           })),
           viewed: record.viewed || false,
         };
@@ -1217,7 +1241,7 @@ const submitPO = async () => {
     try {
       const existingRecord = await pb
         .collection("Collection_1")
-        .getFirstListItem(`Order_No = "${poNumber.value}"`);
+        .getFirstListItem(`Order_No = "${poNumber.value}" && visible = true`);
       if (existingRecord) {
         duplicateOrderNumberError.value = true;
         showPONumberError.value = true;
@@ -1234,14 +1258,12 @@ const submitPO = async () => {
   }
 
   // Convert Philippine time back to UTC before saving to PocketBase
-  // Note: We no longer need to convert from PH to UTC since we want to store UTC+8 
-  // times directly in PocketBase. The input is already in local time (which should be UTC+8)
   const formattedDeliveryDate = new Date(deliveryDate.value).toISOString();
+  const formattedDateOfPO = dateOfPO.value ? new Date(dateOfPO.value).toISOString() : undefined;
 
   // Get current user info
   const creatorId = currentUser.value?.id || "system";
-  const creatorName =
-    currentUser.value?.name || currentUser.value?.email || "System";
+  const creatorName = currentUser.value?.name || currentUser.value?.email || "System";
 
   const modifierId = currentUser.value?.id || "system";
   const modifierName =
@@ -1254,6 +1276,7 @@ const submitPO = async () => {
     tin_ID: tin_ID.value,
     modeofProcurement: modeofProcurement.value,
     deliveryDate: formattedDeliveryDate,
+    dateOfPO: formattedDateOfPO,
     updated: new Date().toISOString(),
     // Change status to "Extended" if it was "Lapsed"
     status:
@@ -1327,6 +1350,18 @@ const submitPO = async () => {
                     : undefined,
                   newValue: formatDeliveryDateTime(formattedDeliveryDate) || "",
                 },
+                dateOfPO: {
+                  changed: !areDatesEqual(
+                    formattedDateOfPO || null,
+                    selectedOrder.value?.dateOfPO
+                  ),
+                  oldValue: selectedOrder.value?.dateOfPO
+                    ? formatDeliveryDateTime(selectedOrder.value.dateOfPO) || undefined
+                    : undefined,
+                  newValue: formattedDateOfPO
+                    ? formatDeliveryDateTime(formattedDateOfPO) || undefined
+                    : undefined,
+                },
               },
               description:
                 isEditMode.value && selectedOrder.value?.status === "Lapsed"
@@ -1354,6 +1389,7 @@ const submitPO = async () => {
           ...documents.value[docIndex],
           ...data,
           deliveryDate: formatDeliveryDateTime(formattedDeliveryDate) || "",
+          dateOfPO: formattedDateOfPO ? formatDeliveryDateTime(formattedDateOfPO) : undefined,
         };
       }
       if (selectedOrder.value?.id === currentEditingId.value) {
@@ -1361,6 +1397,7 @@ const submitPO = async () => {
           ...selectedOrder.value,
           ...data,
           deliveryDate: formatDeliveryDateTime(formattedDeliveryDate) || "",
+          dateOfPO: formattedDateOfPO ? formatDeliveryDateTime(formattedDateOfPO) : undefined,
         };
       }
     } else {
@@ -1370,20 +1407,12 @@ const submitPO = async () => {
         trackingId: `seq${Math.floor(Math.random() * 1000000)}`,
         handledBy: creatorName,
         status: "Pending",
-        visible: true  // Set visible to true by default
+        visible: true
       });
-
-      // Dispatch event for new order creation
-      const createEvent = new CustomEvent('orderCreated', {
-        detail: {
-          orderNo: record.Order_No,
-          createdBy: creatorName
-        }
-      });
-      window.dispatchEvent(createEvent);
 
       // Format the delivery date using the same function used in the overlay
       const formattedPhDate = formatDeliveryDateTime(formattedDeliveryDate);
+      const formattedPhDateOfPO = formattedDateOfPO ? formatDeliveryDateTime(formattedDateOfPO) : undefined;
 
       documents.value.push({
         id: record.id,
@@ -1400,8 +1429,18 @@ const submitPO = async () => {
         tin_ID: record.tin_ID,
         modeofProcurement: record.modeofProcurement,
         deliveryDate: formattedPhDate || "",
+        dateOfPO: formattedPhDateOfPO,
         viewed: false,
       });
+
+      // Dispatch event for new order creation
+      const createEvent = new CustomEvent('orderCreated', {
+        detail: {
+          orderNo: record.Order_No,
+          createdBy: creatorName
+        }
+      });
+      window.dispatchEvent(createEvent);
     }
 
     closeModalAdd();
@@ -1436,6 +1475,9 @@ const openModal = async (order: Document) => {
   // Format created date using the new function with isCreatedDate flag
   const formattedCreatedDate = formatEditedDateTime(order.dateCreated, true);
 
+  // Format Date of PO
+  const formattedDateOfPO = formatDeliveryDateTime(order.dateOfPO);
+
   selectedOrder.value = {
     id: order.id,
     orderNumber: order.orderNumber,
@@ -1449,6 +1491,7 @@ const openModal = async (order: Document) => {
     tin_ID: order.tin_ID,
     modeofProcurement: order.modeofProcurement,
     deliveryDate: formattedDeliveryDate || "",
+    dateOfPO: formattedDateOfPO || null, // Include and format dateOfPO
     verifiedAt: order.verifiedAt,
     completedAt: order.completedAt,
     verificationEvents: order.verificationEvents || [],
@@ -1567,6 +1610,7 @@ const downloadSelectedDocuments = () => {
                   tin_ID: "TIN ID",
                   modeofProcurement: "Mode of Procurement",
                   deliveryDate: "Delivery Date",
+                  dateOfPO: "Date of PO",
                 };
                 return `${fieldNames[field] || field}: ${
                   details.oldValue || "empty"
@@ -1597,10 +1641,10 @@ Created By: ${doc.createdBy}
 SUPPLIER INFORMATION
 =============================================
 Supplier Name: ${doc.supplierName}
-Address: ${doc.address}
+Purpose: ${doc.address}
 TIN ID: ${doc.tin_ID}
 Mode of Procurement: ${doc.modeofProcurement}
-Delivery Date: ${doc.deliveryDate}
+Date Signed: ${doc.deliveryDate}
 
 =============================================
 TIMELINE EVENTS
@@ -1641,7 +1685,7 @@ Status: ${doc.status}
 Handled By: ${doc.handledBy}
 Created By: ${doc.createdBy}
 Supplier Name: ${doc.supplierName}
-Delivery Date: ${doc.deliveryDate}
+Date Signed: ${doc.deliveryDate}
 Verified At: ${
           doc.verifiedAt ? formatTimestamp(doc.verifiedAt) : "Not verified"
         }
@@ -2217,6 +2261,9 @@ const validateForm = () => {
   // Add any additional validation logic you want to execute before submitting
   return true;
 };
+
+// Add new ref for DateOfPO
+const dateOfPO = ref("");
 </script>
 
 <template>
@@ -2296,7 +2343,7 @@ const validateForm = () => {
                   <!-- PO Number Field (Required + 50 char limit) -->
                   <div>
                     <label class="block text-gray-400 text-sm mb-1">
-                      Work Order # <span class="text-red-500">*</span>
+                      Work Order #<span class="text-red-500">*</span>
                     </label>
                     <input
                       v-model="poNumber"
@@ -2329,7 +2376,7 @@ const validateForm = () => {
 
                   <div>
                     <label class="block text-gray-400 text-sm mb-1">
-                      Supplier Name <span class="text-red-500">*</span>
+                      Supplier Name<span class="text-red-500">*</span>
                     </label>
                     <input
                       v-model="supplierName"
@@ -2353,12 +2400,12 @@ const validateForm = () => {
                   <!-- Address -->
                   <div>
                     <label class="block text-gray-400 text-sm mb-1"
-                      >Address<span class="text-red-500">*</span></label
+                      >Purpose<span class="text-red-500">*</span></label
                     >
                     <input
                       v-model="address"
                       type="text"
-                      placeholder="Legazpi City, Albay"
+                      placeholder="Ex. Activity"
                       autocomplete="off"
                       name="address"
                       class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
@@ -2369,7 +2416,7 @@ const validateForm = () => {
                       v-if="showAddressError"
                       class="text-red-500 text-xs mt-1"
                     >
-                      Address is required
+                      Purpose is required
                     </p>
                   </div>
 
@@ -2424,7 +2471,7 @@ const validateForm = () => {
                   <!-- Delivery Date -->
                   <div>
                     <label class="block text-gray-400 text-sm mb-1">
-                      Delivery Date (Lapse after 5 days)<span
+                      Date Signed (Lapse after 5 days)<span
                         class="text-red-500"
                         >*</span
                       >
@@ -2446,11 +2493,25 @@ const validateForm = () => {
                       v-if="showDeliveryDateError"
                       class="text-red-500 text-xs mt-1"
                     >
-                      Delivery date is required
+                      Date Signed is required
                     </p>
                     <p v-if="dateError" class="text-red-500 text-xs mt-1">
-                      Delivery date must be in the future
+                      Date Signed must be in the future
                     </p>
+                  </div>
+
+                  <!-- Date of PO -->
+                  <div>
+                    <label class="block text-gray-400 text-sm mb-1">
+                      Date of PO
+                    </label>
+                    <input
+                      v-model="dateOfPO"
+                      type="datetime-local"
+                      autocomplete="off"
+                      name="date_of_po"
+                      class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert"
+                    />
                   </div>
                 </div>
 
@@ -3011,16 +3072,18 @@ const validateForm = () => {
                 <div class="grid grid-cols-2 gap-2 text-sm">
                   <p class="text-gray-500">Supplier Name:</p>
                   <p>{{ selectedOrder?.supplierName || "Not set" }}</p>
-                  <p class="text-gray-500">Address:</p>
+                  <p class="text-gray-500">Purpose:</p>
                   <p>{{ selectedOrder?.address || "Not set" }}</p>
                   <p class="text-gray-500">TIN ID:</p>
                   <p>{{ selectedOrder?.tin_ID || "Not set" }}</p>
                   <p class="text-gray-500">Mode of Procurement:</p>
                   <p>{{ selectedOrder?.modeofProcurement || "Not set" }}</p>
-                  <p class="text-gray-500">Delivery Date:</p>
+                  <p class="text-gray-500">Date Signed:</p>
                   <p>{{ formatDeliveryDateTime(selectedOrder?.deliveryDate) || "Not set" }}</p>
                   <p class="text-gray-500">Lapse Date:</p>
                   <p>{{ calculateLapseDate(selectedOrder?.deliveryDate) || "Not set" }}</p>
+                  <p class="text-gray-500">Date of PO:</p>
+                  <p>{{ formatDeliveryDateTime(selectedOrder?.dateOfPO) || "Not set" }}</p>
                 </div>
               </div>
 
