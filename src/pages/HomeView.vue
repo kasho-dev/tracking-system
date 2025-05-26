@@ -1642,7 +1642,7 @@ SUPPLIER INFORMATION
 =============================================
 Supplier Name: ${doc.supplierName}
 Purpose: ${doc.address}
-TIN ID: ${doc.tin_ID}
+Date of Activity: ${doc.tin_ID}
 Mode of Procurement: ${doc.modeofProcurement}
 Date Signed: ${doc.deliveryDate}
 
@@ -2420,15 +2420,15 @@ const dateOfPO = ref("");
                     </p>
                   </div>
 
-                  <!-- TIN ID -->
+                  <!-- Date of Activity -->
                   <div>
                     <label class="block text-gray-400 text-sm mb-1"
-                      >TIN ID<span class="text-red-500">*</span></label
+                      >Date of Activity<span class="text-red-500">*</span></label
                     >
                     <input
                       v-model="tin_ID"
                       type="text"
-                      placeholder="716-412-421 VAT"
+                      placeholder="Ex. 2025-01-01"
                       autocomplete="off"
                       name="tin_id"
                       class="w-full p-2 border border-gray-600 rounded-md bg-[#1A1F36] text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
@@ -2439,7 +2439,7 @@ const dateOfPO = ref("");
                       v-if="showTinError"
                       class="text-red-500 text-xs mt-1"
                     >
-                      TIN ID is required
+                    Date of Activity is required
                     </p>
                   </div>
 
@@ -2503,7 +2503,7 @@ const dateOfPO = ref("");
                   <!-- Date of PO -->
                   <div>
                     <label class="block text-gray-400 text-sm mb-1">
-                      Date of PO
+                      Date of PO (Optional)
                     </label>
                     <input
                       v-model="dateOfPO"
@@ -3074,7 +3074,7 @@ const dateOfPO = ref("");
                   <p>{{ selectedOrder?.supplierName || "Not set" }}</p>
                   <p class="text-gray-500">Purpose:</p>
                   <p>{{ selectedOrder?.address || "Not set" }}</p>
-                  <p class="text-gray-500">TIN ID:</p>
+                  <p class="text-gray-500">Date of Activity:</p>
                   <p>{{ selectedOrder?.tin_ID || "Not set" }}</p>
                   <p class="text-gray-500">Mode of Procurement:</p>
                   <p>{{ selectedOrder?.modeofProcurement || "Not set" }}</p>
